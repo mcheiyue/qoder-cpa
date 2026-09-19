@@ -1,0 +1,49 @@
+# Binaries
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Go build artifacts
+*.test
+*.out
+*.prof
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Credentials and auth files (must never be committed)
+*.pem
+*.key
+auth.json
+auth_*.json
+*.auth
+credentials/
+.env
+.env.*
+!.env.example
+
+# Capture and evidence files
+*.capture
+*.pcap
+evidence/
+tools/evidence/
+
+# Release artifacts
+dist/
+release/
+*.zip
+*.sha256
+
+# Temporary files
+tmp/
+temp/
+*.tmp

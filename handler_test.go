@@ -1,0 +1,116 @@
+package main
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
+
+func TestHandleMethodUnknownReturnsTypedError(t *testing.T) {
+	// Given: an unknown method name.
+	method := "nonexistent.method"
+
+	// When: handleMethod dispatches it.
+	raw, err := handleMethod(method, nil)
+	if err != nil {
+		t.Fatalf("handleMethod returned error: %v", err)
+	}
+
+	// Then: an error envelope with code "unknown_method".
+	var env struct {
+		OK    bool `json:"ok"`
+		Error *struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatal(err)
+	}
+	if env.OK {
+		t.Fatal("expected ok=false for unknown method")
+	}
+	if env.Error == nil {
+		t.Fatal("expected error in envelope")
+	}
+	if env.Error.Code != "unknown_method" {
+		t.Fatalf("code=%q, want %q", env.Error.Code, "unknown_method")
+	}
+	if !strings.Contains(env.Error.Message, method) {
+		t.Fatalf("message=%q should contain %q", env.Error.Message, method)
+	}
+}
+
+func TestHandleMethodEmptyMethod(t *testing.T) {
+	// Given: an empty string method.
+	// When: handleMethod dispatches it.
+	// Then: it must return unknown_method error, not panic.
+	raw, err := handleMethod("", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var env struct {
+		OK    bool `json:"ok"`
+		Error *struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatal(err)
+	}
+	if env.OK {
+		t.Fatal("expected ok=false for empty method")
+	}
+	if env.Error == nil || env.Error.Code != "unknown_method" {
+		t.Fatalf("expected unknown_method error, got: %v", env.Error)
+	}
+}
+
+func TestHandleMethodMalformedJSON(t *testing.T) {
+	// Given: a register method with malformed JSON body.
+	// When: handleMethod processes it.
+	// Then: it still returns ok (registration ignores body), not a parse error.
+	raw, err := handleMethod("plugin.register", []byte("{invalid json"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var env struct {
+		OK bool `json:"ok"`
+	}
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatal(err)
+	}
+	if !env.OK {
+		t.Fatal("plugin.register should succeed even with malformed body")
+	}
+}
+
+func TestHandleMethodRegisterReturnsSchema6(t *testing.T) {
+	// Given: the plugin.register method.
+	// When: handleMethod processes it.
+	raw, err := handleMethod("plugin.register", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Then: the result must contain schema_version 6.
+	var env struct {
+		OK     bool            `json:"ok"`
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatal(err)
+	}
+	if !env.OK {
+		t.Fatal("expected ok=true for plugin.register")
+	}
+	var reg struct {
+		SchemaVersion uint32 `json:"schema_version"`
+	}
+	if err := json.Unmarshal(env.Result, &reg); err != nil {
+		t.Fatal(err)
+	}
+	if reg.SchemaVersion != 6 {
+		t.Fatalf("schema=%d, want 6", reg.SchemaVersion)
+	}
+}
