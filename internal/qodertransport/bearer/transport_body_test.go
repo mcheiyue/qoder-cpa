@@ -196,7 +196,7 @@ func TestStream_ToolChoiceForwarded(t *testing.T) {
 	_, err := tr.Stream(context.Background(), StreamRequest{
 		Model:      "qoder-1",
 		Messages:   []Message{{Role: "user", Content: "hi"}},
-		ToolChoice: "auto",
+		ToolChoice: json.RawMessage(`"auto"`),
 	})
 	if err != nil {
 		t.Fatalf("Stream: %v", err)

@@ -80,7 +80,7 @@ type StreamRequest struct {
 	Model       string
 	Messages    []Message
 	Tools       []Tool
-	ToolChoice  any // string or structured tool_choice
+	ToolChoice  json.RawMessage // string or structured tool_choice at the wire boundary
 	Temperature *float64
 	MaxTokens   *int
 	RequestID   string
@@ -204,7 +204,7 @@ func buildRequestBody(req StreamRequest) ([]byte, error) {
 	if len(req.Tools) > 0 {
 		body.Tools = req.Tools
 	}
-	if req.ToolChoice != nil {
+	if len(req.ToolChoice) > 0 {
 		body.ToolChoice = req.ToolChoice
 	}
 	if req.Temperature != nil {

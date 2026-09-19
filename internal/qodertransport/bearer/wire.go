@@ -8,7 +8,7 @@ type requestBody struct {
 	Model         string          `json:"model"`
 	Messages      []Message       `json:"messages"`
 	Tools         []Tool          `json:"tools,omitempty"`
-	ToolChoice    any             `json:"tool_choice,omitempty"`
+	ToolChoice    json.RawMessage `json:"tool_choice,omitempty"`
 	Temperature   *float64        `json:"temperature,omitempty"`
 	MaxTokens     *int            `json:"max_tokens,omitempty"`
 	Stream        bool            `json:"stream"`
