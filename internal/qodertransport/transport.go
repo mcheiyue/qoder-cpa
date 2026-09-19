@@ -31,6 +31,15 @@ func (e *ConfigError) Error() string {
 	return fmt.Sprintf("qodertransport: unknown transport profile %q", e.Value)
 }
 
+// AdapterSetError reports a profile that has no configured adapter.
+type AdapterSetError struct {
+	Profile TransportProfile
+}
+
+func (e *AdapterSetError) Error() string {
+	return fmt.Sprintf("qodertransport: missing adapter for profile %q", e.Profile)
+}
+
 // ParseTransportProfile converts a raw string to a validated TransportProfile.
 // Empty string is not accepted here; use ResolveProfile for that.
 // Unknown values return a typed ConfigError extractable via errors.As.
@@ -78,12 +87,16 @@ type Selector struct {
 }
 
 // NewSelector creates a Selector with the three required adapters in
-// profile order: cosy-api2, cosy-api3, bearer-openai. Panics on nil.
-func NewSelector(cosy2, cosy3, bearer ChatTransport) *Selector {
-	if cosy2 == nil || cosy3 == nil || bearer == nil {
-		panic("qodertransport: NewSelector requires all three adapters")
+// profile order: cosy-api2, cosy-api3, bearer-openai.
+func NewSelector(cosy2, cosy3, bearer ChatTransport) (*Selector, error) {
+	profiles := [3]TransportProfile{ProfileCosyAPI2, ProfileCosyAPI3, ProfileBearerOpenAI}
+	adapters := [3]ChatTransport{cosy2, cosy3, bearer}
+	for index, adapter := range adapters {
+		if adapter == nil {
+			return nil, &AdapterSetError{Profile: profiles[index]}
+		}
 	}
-	return &Selector{adapters: [3]ChatTransport{cosy2, cosy3, bearer}}
+	return &Selector{adapters: adapters}, nil
 }
 
 // Select resolves raw to a TransportProfile and returns the single adapter.

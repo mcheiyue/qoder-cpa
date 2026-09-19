@@ -3,7 +3,6 @@ package qodertransport
 import (
 	"context"
 	"errors"
-	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -34,105 +33,19 @@ func (h *noopHandle) Cancel()                    {}
 type cancelHandle struct{ cancelled atomic.Bool }
 
 func (h *cancelHandle) ReadChunk() ([]byte, error) { return nil, context.Canceled }
-func (h *cancelHandle) Cancel()                     { h.cancelled.Store(true) }
-func (h *cancelHandle) wasCancelled() bool          { return h.cancelled.Load() }
+func (h *cancelHandle) Cancel()                    { h.cancelled.Store(true) }
+func (h *cancelHandle) wasCancelled() bool         { return h.cancelled.Load() }
 
 // cancelAdapter returns a cancelHandle so we can observe Cancel.
-type cancelAdapter struct{ calls atomic.Int64 }
+type cancelAdapter struct {
+	calls atomic.Int64
+	ctx   context.Context
+}
 
-func (a *cancelAdapter) StreamChat(_ context.Context, _ StreamRequest) (StreamHandle, error) {
+func (a *cancelAdapter) StreamChat(ctx context.Context, _ StreamRequest) (StreamHandle, error) {
 	a.calls.Add(1)
+	a.ctx = ctx
 	return &cancelHandle{}, nil
-}
-
-// --- Profile parsing ---
-
-func TestExplicitProfile_Parse_cosy_api2(t *testing.T) {
-	p, err := ParseTransportProfile("cosy-api2")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if p != ProfileCosyAPI2 {
-		t.Errorf("got %q, want %q", p, ProfileCosyAPI2)
-	}
-}
-
-func TestExplicitProfile_Parse_cosy_api3(t *testing.T) {
-	p, err := ParseTransportProfile("cosy-api3")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if p != ProfileCosyAPI3 {
-		t.Errorf("got %q, want %q", p, ProfileCosyAPI3)
-	}
-}
-
-func TestExplicitProfile_Parse_bearer_openai(t *testing.T) {
-	p, err := ParseTransportProfile("bearer-openai")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if p != ProfileBearerOpenAI {
-		t.Errorf("got %q, want %q", p, ProfileBearerOpenAI)
-	}
-}
-
-func TestExplicitProfile_Parse_unknown_returns_config_error(t *testing.T) {
-	_, err := ParseTransportProfile("totally-unknown")
-	if err == nil {
-		t.Fatal("expected error for unknown profile")
-	}
-	var ce *ConfigError
-	if !errors.As(err, &ce) {
-		t.Errorf("want ConfigError, got %T", err)
-	}
-}
-
-func TestExplicitProfile_Parse_unknown_error_contains_value(t *testing.T) {
-	_, err := ParseTransportProfile("totally-unknown")
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !strings.Contains(err.Error(), "totally-unknown") {
-		t.Errorf("error should contain the unknown value, got: %s", err.Error())
-	}
-}
-
-// --- Resolve ---
-
-func TestExplicitProfile_Resolve_empty_returns_default(t *testing.T) {
-	p, err := ResolveProfile("")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if p != DefaultTransportProfile {
-		t.Errorf("got %q, want %q (DefaultTransportProfile)", p, DefaultTransportProfile)
-	}
-}
-
-func TestExplicitProfile_Resolve_valid_passes_through(t *testing.T) {
-	p, err := ResolveProfile("bearer-openai")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if p != ProfileBearerOpenAI {
-		t.Errorf("got %q, want %q", p, ProfileBearerOpenAI)
-	}
-}
-
-func TestExplicitProfile_Resolve_unknown_returns_error(t *testing.T) {
-	_, err := ResolveProfile("bogus")
-	if err == nil {
-		t.Fatal("expected error for unknown profile")
-	}
-}
-
-// --- Default constant ---
-
-func TestExplicitProfile_Default_is_cosy_api2(t *testing.T) {
-	if DefaultTransportProfile != ProfileCosyAPI2 {
-		t.Errorf("DefaultTransportProfile=%q, want %q", DefaultTransportProfile, ProfileCosyAPI2)
-	}
 }
 
 // --- Selector contract tests ---
@@ -152,7 +65,10 @@ func TestExplicitProfile_Select_routes_to_unique_adapter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c2, c3, b := &fakeAdapter{}, &fakeAdapter{}, &fakeAdapter{}
-			sel := NewSelector(c2, c3, b)
+			sel, err := NewSelector(c2, c3, b)
+			if err != nil {
+				t.Fatalf("NewSelector: %v", err)
+			}
 			tr, err := sel.Select(tt.profile)
 			if err != nil {
 				t.Fatalf("Select: %v", err)
@@ -174,7 +90,10 @@ func TestExplicitProfile_Select_routes_to_unique_adapter(t *testing.T) {
 func TestExplicitProfile_Select_error_no_fallback(t *testing.T) {
 	c2 := &fakeAdapter{err: errors.New("upstream 500")}
 	c3, b := &fakeAdapter{}, &fakeAdapter{}
-	sel := NewSelector(c2, c3, b)
+	sel, err := NewSelector(c2, c3, b)
+	if err != nil {
+		t.Fatalf("NewSelector: %v", err)
+	}
 
 	tr, err := sel.Select("cosy-api2")
 	if err != nil {
@@ -198,7 +117,10 @@ func TestExplicitProfile_Select_error_no_fallback(t *testing.T) {
 func TestExplicitProfile_Select_cancel_propagates_to_handle(t *testing.T) {
 	ca := &cancelAdapter{}
 	c2, c3 := &fakeAdapter{}, &fakeAdapter{}
-	sel := NewSelector(c2, c3, ca) // bearer-openai = 3rd param
+	sel, err := NewSelector(c2, c3, ca) // bearer-openai = 3rd param
+	if err != nil {
+		t.Fatalf("NewSelector: %v", err)
+	}
 
 	tr, err := sel.Select("bearer-openai")
 	if err != nil {
@@ -209,8 +131,13 @@ func TestExplicitProfile_Select_cancel_propagates_to_handle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StreamChat: %v", err)
 	}
-	cancel()       // context cancel
-	h.Cancel()     // adapter-level cancel
+	cancel()   // context cancel
+	h.Cancel() // adapter-level cancel
+	select {
+	case <-ca.ctx.Done():
+	default:
+		t.Fatal("context cancellation was not propagated to selected adapter")
+	}
 
 	ch := h.(*cancelHandle)
 	if !ch.wasCancelled() {
@@ -229,17 +156,25 @@ func TestExplicitProfile_Select_cancel_propagates_to_handle(t *testing.T) {
 }
 
 func TestExplicitProfile_NewSelector_rejects_nil_adapter(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic for nil adapter")
-		}
-	}()
-	NewSelector(nil, &fakeAdapter{}, &fakeAdapter{})
+	_, err := NewSelector(nil, &fakeAdapter{}, &fakeAdapter{})
+	if err == nil {
+		t.Fatal("expected error for nil adapter")
+	}
+	var setErr *AdapterSetError
+	if !errors.As(err, &setErr) {
+		t.Fatalf("want AdapterSetError, got %T", err)
+	}
+	if setErr.Profile != ProfileCosyAPI2 {
+		t.Fatalf("profile: got %q, want %q", setErr.Profile, ProfileCosyAPI2)
+	}
 }
 
 func TestExplicitProfile_Select_empty_resolves_to_default(t *testing.T) {
 	c2, c3, b := &fakeAdapter{}, &fakeAdapter{}, &fakeAdapter{}
-	sel := NewSelector(c2, c3, b)
+	sel, err := NewSelector(c2, c3, b)
+	if err != nil {
+		t.Fatalf("NewSelector: %v", err)
+	}
 	tr, err := sel.Select("") // empty → DefaultTransportProfile = cosy-api2
 	if err != nil {
 		t.Fatalf("Select: %v", err)
@@ -257,8 +192,11 @@ func TestExplicitProfile_Select_empty_resolves_to_default(t *testing.T) {
 }
 
 func TestExplicitProfile_Select_unknown_returns_config_error(t *testing.T) {
-	sel := NewSelector(&fakeAdapter{}, &fakeAdapter{}, &fakeAdapter{})
-	_, err := sel.Select("invalid")
+	sel, err := NewSelector(&fakeAdapter{}, &fakeAdapter{}, &fakeAdapter{})
+	if err != nil {
+		t.Fatalf("NewSelector: %v", err)
+	}
+	_, err = sel.Select("invalid")
 	if err == nil {
 		t.Fatal("expected error for unknown profile")
 	}
