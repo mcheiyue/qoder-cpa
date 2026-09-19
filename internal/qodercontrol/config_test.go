@@ -117,6 +117,29 @@ func TestValidateBaseURL_InvalidURL(t *testing.T) {
 	}
 }
 
+func TestValidateBaseURL_RejectsQuery(t *testing.T) {
+	// URLs with query strings must be rejected — they can smuggle
+	// auth redirects or path routing behind a trusted base.
+	cfg := Config{
+		BaseURL:      "https://openapi.qoder.com?evil=1",
+		AllowedHosts: []string{"openapi.qoder.com"},
+	}
+	if err := validateBaseURL(cfg); err == nil {
+		t.Error("want error for URL with query string")
+	}
+}
+
+func TestValidateBaseURL_RejectsFragment(t *testing.T) {
+	// URLs with fragment must be rejected for the same reason.
+	cfg := Config{
+		BaseURL:      "https://openapi.qoder.com#section",
+		AllowedHosts: []string{"openapi.qoder.com"},
+	}
+	if err := validateBaseURL(cfg); err == nil {
+		t.Error("want error for URL with fragment")
+	}
+}
+
 func TestHostInAllowlist(t *testing.T) {
 	tests := []struct {
 		host    string

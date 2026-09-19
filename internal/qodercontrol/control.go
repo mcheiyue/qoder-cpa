@@ -68,6 +68,9 @@ func validateBaseURL(cfg Config) error {
 			return ErrHostNotAllowed
 		}
 	}
+	if u.RawQuery != "" || u.Fragment != "" {
+		return ErrInvalidEndpoint
+	}
 	if !isLoopback(host) && !hostInAllowlist(host, cfg.AllowedHosts) {
 		return ErrHostNotAllowed
 	}
