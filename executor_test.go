@@ -46,6 +46,12 @@ func (h *fakeChatHandle) Cancel() {
 	}
 }
 
+func (h *fakeChatHandle) isCancelled() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.cancelled
+}
+
 type fakeChatTransport struct {
 	handle qodertransport.StreamHandle
 	err    error
@@ -86,7 +92,7 @@ func TestExecutorExecuteAggregatesSingleStream(t *testing.T) {
 	if transport.calls != 1 || body.Choices[0].Message.Content != "hello" || body.Usage.TotalTokens != 7 {
 		t.Fatalf("calls=%d body=%s", transport.calls, response.Payload)
 	}
-	if !handle.cancelled {
+	if !handle.isCancelled() {
 		t.Fatal("stream handle was not closed")
 	}
 }
@@ -118,7 +124,7 @@ func TestExecutorExecuteStreamEmitsAndCloses(t *testing.T) {
 	if len(emitted) != len(handle.chunks) || string(emitted[len(emitted)-1]) != "data: [DONE]\n\n" {
 		t.Fatalf("emitted=%q", emitted)
 	}
-	if !handle.cancelled {
+	if !handle.isCancelled() {
 		t.Fatal("stream handle was not closed")
 	}
 }
