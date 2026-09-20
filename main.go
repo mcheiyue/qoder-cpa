@@ -84,7 +84,7 @@ func managementHandle(raw []byte) ([]byte, error) {
 	if err := json.Unmarshal(raw, &request); err != nil {
 		return errorEnvelopeStatus("invalid_request", "invalid management request", 400), nil
 	}
-	path := request.Path
+	path := managementPath(request.Path)
 	var kind string
 	switch {
 	case path == "/qoder/accounts":
@@ -101,6 +101,16 @@ func managementHandle(raw []byte) ([]byte, error) {
 		return errorEnvelopeStatus("management_error", err.Error(), 500), nil
 	}
 	return okEnvelope(response)
+}
+
+func managementPath(path string) string {
+	path = strings.TrimSpace(path)
+	for _, prefix := range []string{"/v0/management", "/v0/resource/plugins/" + pluginID} {
+		if strings.HasPrefix(path, prefix+"/") {
+			return strings.TrimPrefix(path, prefix)
+		}
+	}
+	return path
 }
 
 // callHostJSON is the testable seam backed by the C ABI host callback in cabi.go.

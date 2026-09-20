@@ -2,10 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 )
 
 func TestHandleMethodUnknownReturnsTypedError(t *testing.T) {
@@ -142,4 +144,70 @@ func TestManagementRegisterReturnsSerializableRoutesAndResource(t *testing.T) {
 	if len(result.Routes) != 2 || result.Routes[0].Path == "" || len(result.Resources) != 1 || result.Resources[0].Path != "/index.html" {
 		t.Fatalf("registration=%s", envelope.Result)
 	}
+}
+
+func TestManagementHandleAcceptsCPAFullPaths(t *testing.T) {
+	original := defaultManagementService
+	defaultManagementService = &managementService{hostCall: func(method string, _ any) (json.RawMessage, error) {
+		if method != pluginabi.MethodHostAuthList {
+			t.Fatalf("host method = %q", method)
+		}
+		return json.RawMessage(`{"files":[]}`), nil
+	}}
+	defer func() { defaultManagementService = original }()
+
+	for _, path := range []string{
+		"/v0/management/qoder/accounts",
+		"/qoder/accounts",
+	} {
+		rawRequest, err := json.Marshal(pluginapi.ManagementRequest{Method: http.MethodGet, Path: path})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rawResponse, err := handleMethod(pluginabi.MethodManagementHandle, rawRequest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response := decodeManagementResponse(t, rawResponse)
+		if !strings.Contains(string(response.Body), `"accounts":[]`) {
+			t.Fatalf("path %q body = %s", path, response.Body)
+		}
+	}
+}
+
+func TestManagementHandleAcceptsCPAResourcePath(t *testing.T) {
+	rawRequest, err := json.Marshal(pluginapi.ManagementRequest{
+		Method: http.MethodGet,
+		Path:   "/v0/resource/plugins/qoder/index.html",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawResponse, err := handleMethod(pluginabi.MethodManagementHandle, rawRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := decodeManagementResponse(t, rawResponse)
+	if !strings.Contains(string(response.Body), "Qoder accounts") {
+		t.Fatalf("resource body = %s", response.Body)
+	}
+}
+
+func decodeManagementResponse(t *testing.T, raw []byte) pluginapi.ManagementResponse {
+	t.Helper()
+	var envelope struct {
+		OK     bool            `json:"ok"`
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !envelope.OK {
+		t.Fatalf("envelope = %s", raw)
+	}
+	var response pluginapi.ManagementResponse
+	if err := json.Unmarshal(envelope.Result, &response); err != nil {
+		t.Fatal(err)
+	}
+	return response
 }
