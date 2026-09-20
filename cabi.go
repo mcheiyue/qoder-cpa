@@ -57,7 +57,45 @@ static void free_host_buffer(void* ptr, size_t len) {
 */
 import "C"
 
-import "unsafe"
+import (
+	"encoding/json"
+	"unsafe"
+
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
+)
+
+func init() { hostJSONCall = callHostJSONReal }
+
+func callHostJSONReal(method string, payload any) (json.RawMessage, error) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	cMethod := C.CString(method)
+	defer C.free(unsafe.Pointer(cMethod))
+	var response C.cliproxy_buffer
+	var request *C.uint8_t
+	if len(raw) > 0 {
+		request = (*C.uint8_t)(C.CBytes(raw))
+		defer C.free(unsafe.Pointer(request))
+	}
+	if C.call_host_api(cMethod, request, C.size_t(len(raw)), &response) != 0 {
+		return nil, simpleErr("host call failed")
+	}
+	if response.ptr == nil || response.len == 0 {
+		return nil, nil
+	}
+	defer C.free_host_buffer(response.ptr, response.len)
+	body := C.GoBytes(unsafe.Pointer(response.ptr), C.int(response.len))
+	var envelope pluginabi.Envelope
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return json.RawMessage(body), nil
+	}
+	if !envelope.OK {
+		return nil, simpleErr("host callback failed")
+	}
+	return envelope.Result, nil
+}
 
 //export cliproxy_plugin_init
 func cliproxy_plugin_init(host *C.cliproxy_host_api, plugin *C.cliproxy_plugin_api) C.int {

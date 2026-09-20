@@ -1,0 +1,90 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
+)
+
+type hostHTTPResponse struct {
+	StatusCode int
+	Headers    http.Header
+	Body       []byte
+}
+
+func (r *hostHTTPResponse) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		StatusCodeCamel int         `json:"StatusCode"`
+		StatusCodeSnake int         `json:"status_code"`
+		Headers         http.Header `json:"Headers"`
+		HeadersLower    http.Header `json:"headers"`
+		Body            []byte      `json:"Body"`
+		BodyLower       []byte      `json:"body"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	r.StatusCode = wire.StatusCodeCamel
+	if r.StatusCode == 0 {
+		r.StatusCode = wire.StatusCodeSnake
+	}
+	r.Headers = wire.Headers
+	if r.Headers == nil {
+		r.Headers = wire.HeadersLower
+	}
+	r.Body = wire.Body
+	if r.Body == nil {
+		r.Body = wire.BodyLower
+	}
+	return nil
+}
+
+type hostRoundTripper struct {
+	callbackID string
+	call       func(string, any) (json.RawMessage, error)
+}
+
+func (t hostRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	var body []byte
+	if req.Body != nil {
+		var err error
+		body, err = io.ReadAll(req.Body)
+		if err != nil {
+			return nil, fmt.Errorf("read host HTTP request body: %w", err)
+		}
+	}
+	raw, err := t.call(pluginabi.MethodHostHTTPDo, map[string]any{
+		"host_callback_id": t.callbackID,
+		"request": pluginapi.HTTPRequest{
+			Method: req.Method, URL: req.URL.String(), Headers: req.Header.Clone(), Body: body,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("host HTTP call: %w", err)
+	}
+	var result hostHTTPResponse
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("decode host HTTP response: %w", err)
+	}
+	if result.StatusCode == 0 {
+		return nil, fmt.Errorf("host HTTP response missing status code")
+	}
+	return &http.Response{
+		StatusCode: result.StatusCode,
+		Header:     result.Headers,
+		Body:       io.NopCloser(bytes.NewReader(result.Body)),
+		Request:    req,
+	}, nil
+}
+
+func newHostHTTPClient(callbackID string) (*http.Client, error) {
+	if callbackID == "" {
+		return nil, fmt.Errorf("host callback ID is required")
+	}
+	return &http.Client{Transport: hostRoundTripper{callbackID: callbackID, call: callHostJSON}}, nil
+}

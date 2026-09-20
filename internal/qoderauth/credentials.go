@@ -104,6 +104,9 @@ func newAuthID(userID string) AuthID {
 	return AuthID("qoder-" + hexEncode(h[:]))
 }
 
+// AuthIDForUser returns the stable CPA auth identifier for a Qoder user.
+func AuthIDForUser(userID string) AuthID { return newAuthID(userID) }
+
 // hexEncode returns a lowercase hex string.
 func hexEncode(b []byte) string {
 	const hex = "0123456789abcdef"
