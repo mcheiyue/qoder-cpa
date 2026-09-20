@@ -37,24 +37,32 @@ const (
 
 // Credential holds the persistent state for an authenticated Qoder account.
 type Credential struct {
-	AccessToken  string
-	RefreshToken string
-	ExpiresAt    time.Time
-	UserID       string
-	Email        string
-	Profile      TransportProfile
+	AccessToken      string
+	RefreshToken     string
+	ExpiresAt        time.Time
+	UserID           string
+	Email            string
+	OrganizationID   string
+	OrganizationTags []string
+	RuntimeInfo      string
+	RuntimeKey       string
+	Profile          TransportProfile
 }
 
 // StorageJSON is the JSON form persisted by CPA auth store.
 // Only Credential fields and Profile are serialized; verifier/nonce/device
 // state are never included.
 type StorageJSON struct {
-	AccessToken  string           `json:"access_token"`
-	RefreshToken string           `json:"refresh_token"`
-	ExpiresAt    time.Time        `json:"expires_at"`
-	UserID       string           `json:"user_id"`
-	Email        string           `json:"email"`
-	Profile      TransportProfile `json:"transport_profile"`
+	AccessToken      string           `json:"access_token"`
+	RefreshToken     string           `json:"refresh_token"`
+	ExpiresAt        time.Time        `json:"expires_at"`
+	UserID           string           `json:"user_id"`
+	Email            string           `json:"email"`
+	OrganizationID   string           `json:"organization_id,omitempty"`
+	OrganizationTags []string         `json:"organization_tags,omitempty"`
+	RuntimeInfo      string           `json:"runtime_info,omitempty"`
+	RuntimeKey       string           `json:"runtime_key,omitempty"`
+	Profile          TransportProfile `json:"transport_profile"`
 }
 
 // Transaction is the in-memory state for a device login polling session.
@@ -154,24 +162,32 @@ func newMachineID() (MachineID, error) {
 // FromCredential constructs a StorageJSON from a Credential.
 func FromCredential(c Credential) StorageJSON {
 	return StorageJSON{
-		AccessToken:  c.AccessToken,
-		RefreshToken: c.RefreshToken,
-		ExpiresAt:    c.ExpiresAt,
-		UserID:       c.UserID,
-		Email:        c.Email,
-		Profile:      c.Profile,
+		AccessToken:      c.AccessToken,
+		RefreshToken:     c.RefreshToken,
+		ExpiresAt:        c.ExpiresAt,
+		UserID:           c.UserID,
+		Email:            c.Email,
+		OrganizationID:   c.OrganizationID,
+		OrganizationTags: append([]string(nil), c.OrganizationTags...),
+		RuntimeInfo:      c.RuntimeInfo,
+		RuntimeKey:       c.RuntimeKey,
+		Profile:          c.Profile,
 	}
 }
 
 // ToCredential converts StorageJSON back to a Credential.
 func (s StorageJSON) ToCredential() Credential {
 	return Credential{
-		AccessToken:  s.AccessToken,
-		RefreshToken: s.RefreshToken,
-		ExpiresAt:    s.ExpiresAt,
-		UserID:       s.UserID,
-		Email:        s.Email,
-		Profile:      s.Profile,
+		AccessToken:      s.AccessToken,
+		RefreshToken:     s.RefreshToken,
+		ExpiresAt:        s.ExpiresAt,
+		UserID:           s.UserID,
+		Email:            s.Email,
+		OrganizationID:   s.OrganizationID,
+		OrganizationTags: append([]string(nil), s.OrganizationTags...),
+		RuntimeInfo:      s.RuntimeInfo,
+		RuntimeKey:       s.RuntimeKey,
+		Profile:          s.Profile,
 	}
 }
 

@@ -14,8 +14,8 @@ import (
 
 func TestFetchProfile_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/user/info" {
-			t.Errorf("path=%q, want /v1/user/info", r.URL.Path)
+		if r.URL.Path != "/api/v1/userinfo" {
+			t.Errorf("path=%q, want /api/v1/userinfo", r.URL.Path)
 		}
 		if r.Header.Get("Authorization") != "Bearer at-123" {
 			t.Errorf("Authorization=%q, want Bearer at-123", r.Header.Get("Authorization"))
@@ -143,6 +143,6 @@ func newTestClient(t *testing.T, srv *httptest.Server) (*Client, error) {
 	return NewClient(nil, Config{
 		BaseURL:       srv.URL,
 		AllowInsecure: true,
-		AllowedHosts:  []string{"openapi.qoder.com"},
+		AllowedHosts:  []string{"openapi.qoder.sh"},
 	})
 }

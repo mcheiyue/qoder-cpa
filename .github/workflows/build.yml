@@ -1,0 +1,60 @@
+name: build
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./... -shuffle=on -count=1
+      - run: CGO_ENABLED=1 go test -race ./...
+      - run: go vet ./...
+
+  build:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: amd64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: mkdir -p dist/linux/${{ matrix.arch }}
+      - run: CGO_ENABLED=1 go build -buildmode=c-shared -trimpath -ldflags='-s -w' -o dist/linux/${{ matrix.arch }}/qoder.so .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qoder-linux-${{ matrix.arch }}
+          path: dist/linux/${{ matrix.arch }}/qoder.so
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: qoder-linux-*
+          merge-multiple: true
+      - run: tar -czf qoder-${GITHUB_REF_NAME}.tar.gz -C dist .
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: qoder-${{ github.ref_name }}.tar.gz

@@ -3,24 +3,21 @@ package qoderauth
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 )
 
 func TestDeviceLogin_Success(t *testing.T) {
 	resetStore()
-	srv := fakeDeviceCodeServer(t)
 	cfg := OAuthConfig{
-		BaseURL:        srv.URL,
-		DeviceCodePath: "/oauth/device/code",
-		TokenPath:      "/oauth/token",
-		ClientID:       "test-client",
+		BaseURL:    "https://qoder.com",
+		DevicePath: "/device/selectAccounts",
+		ClientID:   "test-client",
 	}
-	client := &http.Client{Timeout: 5 * time.Second}
 
 	resp, err := DeviceLogin(context.Background(), DeviceLoginRequest{
 		Config:    cfg,
-		Client:    client,
 		MachineID: "m-test-machine",
 		TTL:       10 * time.Minute,
 	})
@@ -29,11 +26,12 @@ func TestDeviceLogin_Success(t *testing.T) {
 	}
 
 	// Verify response fields.
-	if resp.VerifyURL != "https://qoder.com/activate" {
-		t.Fatalf("VerifyURL=%q, want https://qoder.com/activate", resp.VerifyURL)
+	verifyURL, err := url.Parse(resp.VerifyURL)
+	if err != nil || verifyURL.Path != "/device/selectAccounts" {
+		t.Fatalf("VerifyURL=%q", resp.VerifyURL)
 	}
-	if resp.DeviceCode != "dc-test-123" {
-		t.Fatalf("DeviceCode=%q, want dc-test-123", resp.DeviceCode)
+	if verifyURL.Query().Get("challenge") == "" || verifyURL.Query().Get("nonce") == "" || verifyURL.Query().Get("machine_id") != "m-test-machine" {
+		t.Fatalf("VerifyURL query=%s", verifyURL.RawQuery)
 	}
 	if resp.Transaction == nil {
 		t.Fatal("Transaction is nil")
@@ -53,9 +51,6 @@ func TestDeviceLogin_Success(t *testing.T) {
 	if txn.Machine != "m-test-machine" {
 		t.Fatalf("Machine=%q, want m-test-machine", txn.Machine)
 	}
-	if txn.DeviceCode != "dc-test-123" {
-		t.Fatalf("DeviceCode=%q, want dc-test-123", txn.DeviceCode)
-	}
 	if txn.ExpiresAt.Before(time.Now()) {
 		t.Error("ExpiresAt is in the past")
 	}
@@ -67,11 +62,9 @@ func TestDeviceLogin_Success(t *testing.T) {
 }
 
 func TestDeviceLogin_NilClient(t *testing.T) {
-	_, err := DeviceLogin(context.Background(), DeviceLoginRequest{
-		Config: OAuthConfig{BaseURL: "https://qoder.com"},
-	})
-	if err == nil {
-		t.Fatal("expected error for nil client")
+	resp, err := DeviceLogin(context.Background(), DeviceLoginRequest{Config: DefaultConfig()})
+	if err != nil || resp.VerifyURL == "" {
+		t.Fatalf("DeviceLogin: response=%#v error=%v", resp, err)
 	}
 }
 
@@ -88,8 +81,7 @@ func TestDeviceLogin_EmptyBaseURL(t *testing.T) {
 func TestDeviceLogin_NonHTTPSBlocked(t *testing.T) {
 	resetStore()
 	_, err := DeviceLogin(context.Background(), DeviceLoginRequest{
-		Config: OAuthConfig{BaseURL: "http://qoder.com", DeviceCodePath: "/oauth/device/code"},
-		Client: &http.Client{Timeout: 1 * time.Second},
+		Config: OAuthConfig{BaseURL: "http://qoder.com", DevicePath: "/device/selectAccounts"},
 	})
 	if err == nil {
 		t.Fatal("expected error for non-HTTPS URL")

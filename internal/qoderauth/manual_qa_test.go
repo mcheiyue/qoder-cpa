@@ -16,97 +16,35 @@ import (
 func TestManualQA_FullLifecycle(t *testing.T) {
 	resetStore()
 
-	var deviceCodeCalls, tokenCalls, refreshCalls atomic.Int32
+	var tokenCalls, refreshCalls atomic.Int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/oauth/device/code":
-			deviceCodeCalls.Add(1)
-			if r.Method != http.MethodPost {
-				t.Errorf("device code: method=%s, want POST", r.Method)
-			}
-			if err := r.ParseForm(); err != nil {
-				t.Errorf("device code: parse form: %v", err)
-			}
-			// Assert PKCE challenge present and S256 method.
-			challenge := r.FormValue("code_challenge")
-			if challenge == "" {
-				t.Error("device code: missing code_challenge")
-			}
-			method := r.FormValue("code_challenge_method")
-			if method != "S256" {
-				t.Errorf("device code: method=%q, want S256", method)
-			}
-			// Assert nonce present.
-			nonce := r.FormValue("nonce")
-			if nonce == "" {
-				t.Error("device code: missing nonce")
-			}
-			// Assert machine_id present.
-			machineID := r.FormValue("machine_id")
-			if machineID == "" {
-				t.Error("device code: missing machine_id")
-			}
-			if !strings.HasPrefix(machineID, "m-") {
-				t.Errorf("device code: machine_id=%q, missing m- prefix", machineID)
-			}
-			// Assert client_id.
-			if r.FormValue("client_id") == "" {
-				t.Error("device code: missing client_id")
-			}
-
-			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprint(w, `{
-				"device_code": "dc-manual-qa",
-				"user_code": "QA12-3456",
-				"verification_uri": "https://qoder.com/activate",
-				"expires_in": 900,
-				"interval": 5
-			}`)
-
-		case "/oauth/token":
+		case "/api/v1/deviceToken/poll":
 			tokenCalls.Add(1)
-			if r.Method != http.MethodPost {
-				t.Errorf("token: method=%s, want POST", r.Method)
-			}
-			if err := r.ParseForm(); err != nil {
-				t.Errorf("token: parse form: %v", err)
-			}
-			if r.FormValue("grant_type") != "urn:ietf:params:oauth:grant-type:device_code" {
-				t.Errorf("token: grant_type=%q", r.FormValue("grant_type"))
-			}
-			if r.FormValue("device_code") != "dc-manual-qa" {
-				t.Errorf("token: device_code=%q", r.FormValue("device_code"))
+			if r.Method != http.MethodGet || r.URL.Query().Get("verifier") == "" {
+				t.Errorf("poll request invalid: method=%s query=%s", r.Method, r.URL.RawQuery)
 			}
 			// Return success immediately.
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprint(w, `{
-				"access_token": "manual-qa-access-token",
+				"token": "manual-qa-access-token",
 				"refresh_token": "manual-qa-refresh-token",
-				"token_type": "bearer",
+				"user_id": "manual-user",
 				"expires_in": 3600,
 				"scope": "openid profile"
 			}`)
 
-		case "/oauth/refresh":
+		case "/api/v1/deviceToken/refresh":
 			refreshCalls.Add(1)
 			if r.Method != http.MethodPost {
 				t.Errorf("refresh: method=%s, want POST", r.Method)
 			}
-			if err := r.ParseForm(); err != nil {
-				t.Errorf("refresh: parse form: %v", err)
-			}
-			if r.FormValue("grant_type") != "refresh_token" {
-				t.Errorf("refresh: grant_type=%q", r.FormValue("grant_type"))
-			}
-			if r.FormValue("refresh_token") != "manual-qa-refresh-token" {
-				t.Errorf("refresh: refresh_token=%q", r.FormValue("refresh_token"))
-			}
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprint(w, `{
-				"access_token": "refreshed-access-token",
+				"token": "refreshed-access-token",
 				"refresh_token": "refreshed-refresh-token",
-				"token_type": "bearer",
+				"user_id": "manual-user",
 				"expires_in": 3600
 			}`)
 
@@ -118,10 +56,9 @@ func TestManualQA_FullLifecycle(t *testing.T) {
 	defer srv.Close()
 
 	cfg := OAuthConfig{
-		BaseURL:        srv.URL,
-		DeviceCodePath: "/oauth/device/code",
-		TokenPath:      "/oauth/token",
-		ClientID:       "manual-qa-test",
+		BaseURL:    srv.URL,
+		APIBaseURL: srv.URL, PollPath: "/api/v1/deviceToken/poll",
+		ClientID: "manual-qa-test",
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
 
@@ -138,12 +75,6 @@ func TestManualQA_FullLifecycle(t *testing.T) {
 	t.Logf("Login: VerifyURL=%s, DeviceCode=%s, TxnID=%s", loginResp.VerifyURL, loginResp.DeviceCode, loginResp.Transaction.ID)
 
 	// Assert login response.
-	if loginResp.VerifyURL != "https://qoder.com/activate" {
-		t.Errorf("VerifyURL=%q", loginResp.VerifyURL)
-	}
-	if loginResp.DeviceCode != "dc-manual-qa" {
-		t.Errorf("DeviceCode=%q", loginResp.DeviceCode)
-	}
 	if loginResp.Transaction.Machine != "m-qa-machine-001" {
 		t.Errorf("Machine=%q", loginResp.Transaction.Machine)
 	}
@@ -209,7 +140,7 @@ func TestManualQA_FullLifecycle(t *testing.T) {
 
 	// === STEP 5: Refresh ===
 	refreshResp, err := Refresh(context.Background(), RefreshRequest{
-		Config: RefreshConfig{TokenURL: srv.URL + "/oauth/refresh", ClientID: cfg.ClientID},
+		Config: RefreshConfig{TokenURL: srv.URL + "/api/v1/deviceToken/refresh", ClientID: cfg.ClientID},
 		Client: client,
 		Cred:   *cred,
 	})
@@ -228,13 +159,9 @@ func TestManualQA_FullLifecycle(t *testing.T) {
 	}
 
 	// === Assert call counts ===
-	dc := int(deviceCodeCalls.Load())
 	tc := int(tokenCalls.Load())
 	rc := int(refreshCalls.Load())
-	t.Logf("Call counts: device_code=%d, token=%d, refresh=%d", dc, tc, rc)
-	if dc != 1 {
-		t.Errorf("device_code calls=%d, want 1", dc)
-	}
+	t.Logf("Call counts: poll=%d, refresh=%d", tc, rc)
 	if tc != 1 {
 		t.Errorf("token calls=%d, want 1", tc)
 	}

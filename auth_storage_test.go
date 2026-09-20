@@ -48,7 +48,7 @@ func TestAuthRefreshABIRotatesTokenAndPreservesProfile(t *testing.T) {
 	previousCall := hostJSONCall
 	previousService := defaultAuthService
 	t.Cleanup(func() { hostJSONCall, defaultAuthService = previousCall, previousService })
-	defaultAuthService.oauthConfig = qoderauth.OAuthConfig{BaseURL: "https://qoder.test", TokenPath: "/token", ClientID: "client"}
+	defaultAuthService.oauthConfig = qoderauth.OAuthConfig{BaseURL: "https://qoder.test", APIBaseURL: "https://qoder.test", ClientID: "client"}
 	hostJSONCall = func(_ string, _ any) (json.RawMessage, error) {
 		return json.Marshal(pluginapi.HTTPResponse{
 			StatusCode: http.StatusOK,
@@ -58,6 +58,7 @@ func TestAuthRefreshABIRotatesTokenAndPreservesProfile(t *testing.T) {
 	credential := qoderauth.Credential{
 		AccessToken: "old-access", RefreshToken: "old-refresh", ExpiresAt: time.Now().Add(time.Minute),
 		UserID: "user-a", Email: "a@example.com", Profile: qoderauth.TransportProfileBearerOpenAI,
+		RuntimeInfo: "runtime-info", RuntimeKey: "runtime-key",
 	}
 	data, err := authData(credential, "")
 	if err != nil {
@@ -81,6 +82,9 @@ func TestAuthRefreshABIRotatesTokenAndPreservesProfile(t *testing.T) {
 	}
 	if refreshed.Profile != qoderauth.TransportProfileBearerOpenAI || refreshed.UserID != "user-a" {
 		t.Fatalf("credential fields changed: %#v", refreshed)
+	}
+	if refreshed.RuntimeInfo != "runtime-info" || refreshed.RuntimeKey != "runtime-key" {
+		t.Fatalf("runtime fields changed: %#v", refreshed)
 	}
 }
 

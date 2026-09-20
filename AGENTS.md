@@ -10,7 +10,7 @@ CPA plugin for Qoder: device OAuth, dynamic models, chat execution.
 ## Architecture
 
 Root `package main` contains:
-- `main.go` — method dispatch, host callback placeholder
+- `main.go` — method dispatch and management RPC dispatch
 - `cabi.go` — CGO FFI layer (build-tagged `cgo`)
 - `registration.go` — schema-6 registration with qoder capabilities
 - `envelope.go` — ok/error envelope helpers

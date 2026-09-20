@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -14,19 +15,21 @@ import (
 // OAuthConfig holds the Qoder Device OAuth endpoint contracts.
 // Production URLs are HTTPS+allowlisted; loopback allowed only in tests.
 type OAuthConfig struct {
-	BaseURL        string
-	DeviceCodePath string
-	TokenPath      string
-	ClientID       string
+	BaseURL    string
+	APIBaseURL string
+	DevicePath string
+	PollPath   string
+	ClientID   string
 }
 
 // DefaultConfig returns the official Qoder Device OAuth endpoints.
 func DefaultConfig() OAuthConfig {
 	return OAuthConfig{
-		BaseURL:        "https://qoder.com",
-		DeviceCodePath: "/oauth/device/code",
-		TokenPath:      "/oauth/token",
-		ClientID:       "qoder-cpa",
+		BaseURL:    "https://qoder.com",
+		APIBaseURL: "https://openapi.qoder.sh",
+		DevicePath: "/device/selectAccounts",
+		PollPath:   "/api/v1/deviceToken/poll",
+		ClientID:   "qoder-cpa",
 	}
 }
 
@@ -46,14 +49,6 @@ type DeviceLoginResponse struct {
 	ExpiresAt   time.Time
 }
 
-type deviceCodeResponse struct {
-	DeviceCode      string `json:"device_code"`
-	UserCode        string `json:"user_code"`
-	VerificationURI string `json:"verification_uri"`
-	ExpiresIn       int    `json:"expires_in"`
-	Interval        int    `json:"interval"`
-}
-
 // PollLoginRequest contains the parameters for polling a login transaction.
 type PollLoginRequest struct {
 	Config        OAuthConfig
@@ -69,11 +64,11 @@ type PollStatus struct {
 }
 
 type tokenResponse struct {
-	AccessToken  string `json:"access_token"`
+	AccessToken  string `json:"token"`
 	RefreshToken string `json:"refresh_token"`
-	TokenType    string `json:"token_type"`
+	UserID       string `json:"user_id"`
+	ExpiresAt    string `json:"expires_at"`
 	ExpiresIn    int    `json:"expires_in"`
-	Scope        string `json:"scope"`
 }
 
 type tokenPendingResponse struct {
@@ -83,11 +78,13 @@ type tokenPendingResponse struct {
 
 // DeviceLogin initiates the Qoder Device OAuth flow.
 func DeviceLogin(ctx context.Context, req DeviceLoginRequest) (*DeviceLoginResponse, error) {
-	if req.Client == nil {
-		return nil, errors.New("qoderauth: nil HTTP client")
-	}
+	_ = ctx
 	if req.Config.BaseURL == "" {
 		return nil, errors.New("qoderauth: empty base URL")
+	}
+	base, err := url.Parse(req.Config.BaseURL)
+	if err != nil || base.Hostname() == "" || (base.Scheme != "https" && !isLoopback(base.Hostname())) {
+		return nil, ErrInvalidHost
 	}
 
 	verifier, err := newPKCEVerifier()
@@ -112,31 +109,16 @@ func DeviceLogin(ctx context.Context, req DeviceLoginRequest) (*DeviceLoginRespo
 		ttl = 15 * time.Minute
 	}
 
-	body := url.Values{
-		"client_id":             {req.Config.ClientID},
-		"code_challenge":        {challenge},
-		"code_challenge_method": {"S256"},
-		"nonce":                 {nonce},
-		"machine_id":            {string(machineID)},
-	}
-
-	tokenURL := req.Config.BaseURL + req.Config.DeviceCodePath
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL,
-		strings.NewReader(body.Encode()))
+	verifyURL, err := url.Parse(strings.TrimRight(req.Config.BaseURL, "/") + req.Config.DevicePath)
 	if err != nil {
-		return nil, fmt.Errorf("qoderauth: building device code request: %w", err)
+		return nil, fmt.Errorf("qoderauth: building device URL: %w", err)
 	}
-	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	respBody, err := doHTTPRequest(ctx, req.Client, httpReq)
-	if err != nil {
-		return nil, err
-	}
-
-	var dcResp deviceCodeResponse
-	if err := json.Unmarshal(respBody, &dcResp); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformedResponse, err)
-	}
+	query := verifyURL.Query()
+	query.Set("challenge", challenge)
+	query.Set("challenge_method", "S256")
+	query.Set("machine_id", string(machineID))
+	query.Set("nonce", nonce)
+	verifyURL.RawQuery = query.Encode()
 
 	txnID, err := newTransactionID()
 	if err != nil {
@@ -145,22 +127,20 @@ func DeviceLogin(ctx context.Context, req DeviceLoginRequest) (*DeviceLoginRespo
 
 	now := time.Now()
 	txn := &Transaction{
-		ID:         txnID,
-		Verifier:   verifier,
-		Nonce:      nonce,
-		Machine:    machineID,
-		DeviceCode: dcResp.DeviceCode,
-		VerifyURL:  dcResp.VerificationURI,
-		ExpiresAt:  now.Add(ttl),
-		CreatedAt:  now,
-		Status:     TransactionPending,
+		ID:        txnID,
+		Verifier:  verifier,
+		Nonce:     nonce,
+		Machine:   machineID,
+		VerifyURL: verifyURL.String(),
+		ExpiresAt: now.Add(ttl),
+		CreatedAt: now,
+		Status:    TransactionPending,
 	}
 
 	defaultStore.set(txnID, txn)
 
 	return &DeviceLoginResponse{
-		VerifyURL:   dcResp.VerificationURI,
-		DeviceCode:  dcResp.DeviceCode,
+		VerifyURL:   verifyURL.String(),
 		Transaction: txn,
 		ExpiresAt:   txn.ExpiresAt,
 	}, nil
@@ -190,31 +170,39 @@ func PollLogin(ctx context.Context, req PollLoginRequest) (*PollStatus, error) {
 		return nil, ErrTransactionExpired
 	}
 
-	body := url.Values{
-		"grant_type":  {"urn:ietf:params:oauth:grant-type:device_code"},
-		"device_code": {txn.DeviceCode},
-		"client_id":   {req.Config.ClientID},
-	}
-
-	tokenURL := req.Config.BaseURL + req.Config.TokenPath
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL,
-		strings.NewReader(body.Encode()))
+	pollURL, err := url.Parse(strings.TrimRight(req.Config.APIBaseURL, "/") + req.Config.PollPath)
 	if err != nil {
-		return nil, fmt.Errorf("qoderauth: building token request: %w", err)
+		return nil, fmt.Errorf("qoderauth: building poll URL: %w", err)
 	}
-	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	respBody, err := doHTTPRequest(ctx, req.Client, httpReq)
+	query := pollURL.Query()
+	query.Set("nonce", txn.Nonce)
+	query.Set("verifier", txn.Verifier)
+	query.Set("challenge_method", "S256")
+	pollURL.RawQuery = query.Encode()
+	respBody, statusCode, err := doPollRequest(ctx, req.Client, pollURL.String())
 	if err != nil {
 		return nil, err
+	}
+	if statusCode == http.StatusNotFound || statusCode == http.StatusAccepted {
+		return &PollStatus{Status: TransactionPending}, nil
+	}
+	if statusCode < 200 || statusCode >= 300 {
+		return nil, fmt.Errorf("%w: HTTP %d", ErrUpstreamFailed, statusCode)
 	}
 
 	var tokResp tokenResponse
 	if err := json.Unmarshal(respBody, &tokResp); err == nil && tokResp.AccessToken != "" {
+		expiresAt := time.Now().Add(time.Duration(tokResp.ExpiresIn) * time.Second)
+		if tokResp.ExpiresAt != "" {
+			if parsed, parseErr := time.Parse(time.RFC3339, tokResp.ExpiresAt); parseErr == nil {
+				expiresAt = parsed
+			}
+		}
 		cred := &Credential{
 			AccessToken:  tokResp.AccessToken,
 			RefreshToken: tokResp.RefreshToken,
-			ExpiresAt:    time.Now().Add(time.Duration(tokResp.ExpiresIn) * time.Second),
+			ExpiresAt:    expiresAt,
+			UserID:       tokResp.UserID,
 		}
 		txn.Status = TransactionSuccess
 		txn.Credential = cred
@@ -248,4 +236,28 @@ func PollLogin(ctx context.Context, req PollLoginRequest) (*PollStatus, error) {
 		defaultStore.delete(req.TransactionID)
 		return nil, fmt.Errorf("%w: %s", ErrUpstreamFailed, pendResp.Error)
 	}
+}
+
+func doPollRequest(ctx context.Context, client *http.Client, endpoint string) ([]byte, int, error) {
+	if client == nil {
+		return nil, 0, errors.New("qoderauth: nil HTTP client")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("qoderauth: building poll request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("%w: %v", ErrUpstreamFailed, err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes+1))
+	if err != nil {
+		return nil, resp.StatusCode, fmt.Errorf("%w: %v", ErrMalformedResponse, err)
+	}
+	if len(body) > maxResponseBodyBytes {
+		return nil, resp.StatusCode, ErrResponseTooLarge
+	}
+	return body, resp.StatusCode, nil
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/mcheiyue/qoder-cpa/internal/qoderauth"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
@@ -30,7 +31,7 @@ func handleMethod(method string, raw []byte) ([]byte, error) {
 	case pluginabi.MethodExecutorIdentifier, pluginabi.MethodExecutorExecute,
 		pluginabi.MethodExecutorExecuteStream, pluginabi.MethodExecutorCountTokens,
 		pluginabi.MethodExecutorHTTPRequest:
-		return notImplemented(method)
+		return handleExecutorMethod(method, raw)
 	default:
 		return errorEnvelope("unknown_method", "unknown method: "+method), nil
 	}
@@ -78,18 +79,31 @@ func notImplemented(method string) ([]byte, error) {
 	return errorEnvelope("not_implemented", method+" not yet implemented"), nil
 }
 
-func managementRegister() map[string]any {
-	return map[string]any{
-		"Routes":    []map[string]string{},
-		"Resources": []map[string]string{},
-	}
-}
-
 func managementHandle(raw []byte) ([]byte, error) {
-	return errorEnvelope("not_implemented", "management.handle not yet implemented"), nil
+	var request pluginapi.ManagementRequest
+	if err := json.Unmarshal(raw, &request); err != nil {
+		return errorEnvelopeStatus("invalid_request", "invalid management request", 400), nil
+	}
+	path := request.Path
+	var kind string
+	switch {
+	case path == "/qoder/accounts":
+		kind = "accounts"
+	case path == "/qoder/accounts/profile":
+		kind = "profile"
+	case path == "/index.html" || strings.HasSuffix(path, "/qoder/index.html"):
+		kind = "web"
+	default:
+		return errorEnvelopeStatus("not_found", "management route not found", 404), nil
+	}
+	response, err := (managementHandler{kind: kind}).HandleManagement(context.Background(), request)
+	if err != nil {
+		return errorEnvelopeStatus("management_error", err.Error(), 500), nil
+	}
+	return okEnvelope(response)
 }
 
-// callHostJSON is a placeholder for host RPC — will be wired in later todos.
+// callHostJSON is the testable seam backed by the C ABI host callback in cabi.go.
 var hostJSONCall func(method string, payload any) (json.RawMessage, error)
 
 func callHostJSON(method string, payload any) (json.RawMessage, error) {

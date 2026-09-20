@@ -15,9 +15,9 @@ import (
 )
 
 // TestManualQA_FakeServer runs a comprehensive fake-server manual QA covering
-// profile, runtime, models, and quota in a single server.
+// profile, models, and quota in a single server.
 func TestManualQA_FakeServer(t *testing.T) {
-	var profileHits, runtimeHits, modelsHits, quotaHits atomic.Int32
+	var profileHits, modelsHits, quotaHits atomic.Int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify auth header on every request.
@@ -27,12 +27,9 @@ func TestManualQA_FakeServer(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 
 		switch r.URL.Path {
-		case "/v1/user/info":
+		case "/api/v1/userinfo":
 			profileHits.Add(1)
 			io.WriteString(w, `{"user_id":"qa-user","email":"qa@qoder.com","name":"QA"}`)
-		case "/v1/cosy/runtime":
-			runtimeHits.Add(1)
-			io.WriteString(w, `{"authorization":"Bearer cosy-qa","session_id":"s1","uid":"qa-user","token":"tok"}`)
 		case "/v1/models":
 			modelsHits.Add(1)
 			io.WriteString(w, `{"data":[{"id":"m1","name":"Model 1"},{"id":"m2","name":"Model 2"}]}`)
@@ -48,7 +45,7 @@ func TestManualQA_FakeServer(t *testing.T) {
 	c, err := NewClient(nil, Config{
 		BaseURL:       srv.URL,
 		AllowInsecure: true,
-		AllowedHosts:  []string{"openapi.qoder.com"},
+		AllowedHosts:  []string{"openapi.qoder.sh"},
 		Timeout:       5 * time.Second,
 	})
 	if err != nil {
@@ -64,15 +61,6 @@ func TestManualQA_FakeServer(t *testing.T) {
 	}
 	if p.UserID != "qa-user" {
 		t.Errorf("profile UserID=%q, want qa-user", p.UserID)
-	}
-
-	// Runtime
-	rf, err := c.FetchRuntimeFields(ctx, cred)
-	if err != nil {
-		t.Fatalf("FetchRuntimeFields: %v", err)
-	}
-	if rf.Authorization != "Bearer cosy-qa" {
-		t.Errorf("runtime Authorization=%q, want Bearer cosy-qa", rf.Authorization)
 	}
 
 	// Models
@@ -97,9 +85,6 @@ func TestManualQA_FakeServer(t *testing.T) {
 	if profileHits.Load() != 1 {
 		t.Errorf("profileHits=%d, want 1", profileHits.Load())
 	}
-	if runtimeHits.Load() != 1 {
-		t.Errorf("runtimeHits=%d, want 1", runtimeHits.Load())
-	}
 	if modelsHits.Load() != 1 {
 		t.Errorf("modelsHits=%d, want 1", modelsHits.Load())
 	}
@@ -111,7 +96,7 @@ func TestManualQA_FakeServer(t *testing.T) {
 // TestAdversarial_Redirect verifies that redirects are not followed (default client).
 func TestAdversarial_Redirect(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/user/info" {
+		if r.URL.Path == "/api/v1/userinfo" {
 			http.Redirect(w, r, "/evil", http.StatusFound)
 			return
 		}
@@ -123,7 +108,7 @@ func TestAdversarial_Redirect(t *testing.T) {
 	c, err := NewClient(nil, Config{
 		BaseURL:       srv.URL,
 		AllowInsecure: true,
-		AllowedHosts:  []string{"openapi.qoder.com"},
+		AllowedHosts:  []string{"openapi.qoder.sh"},
 	})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
@@ -145,7 +130,7 @@ func TestAdversarial_SlowServer(t *testing.T) {
 	c, err := NewClient(&http.Client{Timeout: 50 * time.Millisecond}, Config{
 		BaseURL:       srv.URL,
 		AllowInsecure: true,
-		AllowedHosts:  []string{"openapi.qoder.com"},
+		AllowedHosts:  []string{"openapi.qoder.sh"},
 	})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)

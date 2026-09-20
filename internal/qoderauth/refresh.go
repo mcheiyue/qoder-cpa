@@ -1,13 +1,12 @@
 package qoderauth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
-	"strings"
 	"sync"
 	"time"
 )
@@ -36,6 +35,7 @@ type RefreshResponse struct {
 
 // tokenRefreshResponse is the upstream JSON for a token refresh.
 type tokenRefreshResponse struct {
+	Token        string `json:"token"`
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 	TokenType    string `json:"token_type"`
@@ -119,18 +119,16 @@ func Refresh(ctx context.Context, req RefreshRequest) (*RefreshResponse, error) 
 }
 
 func doRefresh(ctx context.Context, req RefreshRequest) (*RefreshResponse, error) {
-	body := url.Values{
-		"grant_type":    {"refresh_token"},
-		"refresh_token": {req.Cred.RefreshToken},
-		"client_id":     {req.Config.ClientID},
+	body, err := json.Marshal(map[string]string{"refresh_token": req.Cred.RefreshToken})
+	if err != nil {
+		return nil, fmt.Errorf("qoderauth: encoding refresh request: %w", err)
 	}
-
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, req.Config.TokenURL,
-		strings.NewReader(body.Encode()))
+		bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("qoderauth: building refresh request: %w", err)
 	}
-	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	httpReq.Header.Set("Content-Type", "application/json")
 
 	respBody, err := doHTTPRequest(ctx, req.Client, httpReq)
 	if err != nil {
@@ -142,7 +140,11 @@ func doRefresh(ctx context.Context, req RefreshRequest) (*RefreshResponse, error
 		return nil, fmt.Errorf("%w: %v", ErrMalformedResponse, err)
 	}
 
-	if tokResp.AccessToken == "" {
+	accessToken := tokResp.Token
+	if accessToken == "" {
+		accessToken = tokResp.AccessToken
+	}
+	if accessToken == "" {
 		// Try error response.
 		var errResp tokenPendingResponse
 		if err := json.Unmarshal(respBody, &errResp); err == nil {
@@ -168,12 +170,16 @@ func doRefresh(ctx context.Context, req RefreshRequest) (*RefreshResponse, error
 
 	return &RefreshResponse{
 		Credential: Credential{
-			AccessToken:  tokResp.AccessToken,
-			RefreshToken: refreshToken,
-			ExpiresAt:    now.Add(time.Duration(tokResp.ExpiresIn) * time.Second),
-			UserID:       req.Cred.UserID,
-			Email:        req.Cred.Email,
-			Profile:      req.Cred.Profile,
+			AccessToken:      accessToken,
+			RefreshToken:     refreshToken,
+			ExpiresAt:        now.Add(time.Duration(tokResp.ExpiresIn) * time.Second),
+			UserID:           req.Cred.UserID,
+			Email:            req.Cred.Email,
+			OrganizationID:   req.Cred.OrganizationID,
+			OrganizationTags: append([]string(nil), req.Cred.OrganizationTags...),
+			RuntimeInfo:      req.Cred.RuntimeInfo,
+			RuntimeKey:       req.Cred.RuntimeKey,
+			Profile:          req.Cred.Profile,
 		},
 		NextRefreshAfter: now.Add(ttl),
 	}, nil

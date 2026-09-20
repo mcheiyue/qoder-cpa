@@ -27,7 +27,7 @@ func TestDoRequest_Success(t *testing.T) {
 	c, _ := NewClient(nil, Config{
 		BaseURL:       srv.URL,
 		AllowInsecure: true,
-		AllowedHosts:  []string{"openapi.qoder.com"},
+		AllowedHosts:  []string{"openapi.qoder.sh"},
 	})
 	body, err := c.doRequest(context.Background(), http.MethodGet, srv.URL+"/test", "test-token")
 	if err != nil {
@@ -48,7 +48,7 @@ func TestDoRequest_UpstreamError(t *testing.T) {
 	c, _ := NewClient(nil, Config{
 		BaseURL:       srv.URL,
 		AllowInsecure: true,
-		AllowedHosts:  []string{"openapi.qoder.com"},
+		AllowedHosts:  []string{"openapi.qoder.sh"},
 	})
 	_, err := c.doRequest(context.Background(), http.MethodGet, srv.URL+"/test", "tok")
 	if err == nil {
@@ -72,7 +72,7 @@ func TestDoRequest_BodyLimit(t *testing.T) {
 	c, _ := NewClient(nil, Config{
 		BaseURL:       srv.URL,
 		AllowInsecure: true,
-		AllowedHosts:  []string{"openapi.qoder.com"},
+		AllowedHosts:  []string{"openapi.qoder.sh"},
 	})
 	_, err := c.doRequest(context.Background(), http.MethodGet, srv.URL+"/test", "")
 	if !errors.Is(err, ErrResponseTooLarge) {
@@ -89,7 +89,7 @@ func TestDoRequest_ContextCancel(t *testing.T) {
 	c, _ := NewClient(nil, Config{
 		BaseURL:       srv.URL,
 		AllowInsecure: true,
-		AllowedHosts:  []string{"openapi.qoder.com"},
+		AllowedHosts:  []string{"openapi.qoder.sh"},
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -109,7 +109,7 @@ func TestDoRequest_Timeout(t *testing.T) {
 	c, _ := NewClient(&http.Client{Timeout: 50 * time.Millisecond}, Config{
 		BaseURL:       srv.URL,
 		AllowInsecure: true,
-		AllowedHosts:  []string{"openapi.qoder.com"},
+		AllowedHosts:  []string{"openapi.qoder.sh"},
 	})
 	_, err := c.doRequest(context.Background(), http.MethodGet, srv.URL+"/test", "")
 	if err == nil {
@@ -127,7 +127,7 @@ func TestDoRequest_NonJSONResponse(t *testing.T) {
 	c, _ := NewClient(nil, Config{
 		BaseURL:       srv.URL,
 		AllowInsecure: true,
-		AllowedHosts:  []string{"openapi.qoder.com"},
+		AllowedHosts:  []string{"openapi.qoder.sh"},
 	})
 	body, err := c.doRequest(context.Background(), http.MethodGet, srv.URL+"/test", "")
 	if err != nil {
@@ -140,11 +140,11 @@ func TestDoRequest_NonJSONResponse(t *testing.T) {
 
 func TestBuildURL(t *testing.T) {
 	c, _ := NewClient(nil, Config{
-		BaseURL:      "https://openapi.qoder.com",
-		AllowedHosts: []string{"openapi.qoder.com"},
+		BaseURL:      "https://openapi.qoder.sh",
+		AllowedHosts: []string{"openapi.qoder.sh"},
 	})
 	got := c.buildURL("/v1/models")
-	want := "https://openapi.qoder.com/v1/models"
+	want := "https://openapi.qoder.sh/v1/models"
 	if got != want {
 		t.Errorf("buildURL=%q, want %q", got, want)
 	}
@@ -152,11 +152,11 @@ func TestBuildURL(t *testing.T) {
 
 func TestBuildURL_StripsTrailingSlash(t *testing.T) {
 	c, _ := NewClient(nil, Config{
-		BaseURL:      "https://openapi.qoder.com/",
-		AllowedHosts: []string{"openapi.qoder.com"},
+		BaseURL:      "https://openapi.qoder.sh/",
+		AllowedHosts: []string{"openapi.qoder.sh"},
 	})
 	got := c.buildURL("/v1/models")
-	want := "https://openapi.qoder.com/v1/models"
+	want := "https://openapi.qoder.sh/v1/models"
 	if got != want {
 		t.Errorf("buildURL=%q, want %q", got, want)
 	}

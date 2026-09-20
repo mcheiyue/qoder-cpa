@@ -24,42 +24,14 @@ func fakeDeviceCodeServer(t *testing.T, opts ...func(*fakeConfig)) *httptest.Ser
 	mux := http.NewServeMux()
 	var callCount atomic.Int32
 
-	mux.HandleFunc("/oauth/device/code", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/deviceToken/poll", func(w http.ResponseWriter, r *http.Request) {
 		callCount.Add(1)
-		if r.Method != http.MethodPost {
-			t.Errorf("device code: got method %s, want POST", r.Method)
+		if r.Method != http.MethodGet {
+			t.Errorf("poll: got method %s, want GET", r.Method)
 		}
-		if err := r.ParseForm(); err != nil {
-			t.Errorf("device code: parse form: %v", err)
+		if r.URL.Query().Get("nonce") == "" || r.URL.Query().Get("verifier") == "" {
+			t.Error("poll: missing nonce or verifier")
 		}
-		// Verify PKCE challenge is sent.
-		if r.FormValue("code_challenge") == "" {
-			t.Error("device code: missing code_challenge")
-		}
-		if r.FormValue("code_challenge_method") != "S256" {
-			t.Errorf("device code: code_challenge_method=%q, want S256", r.FormValue("code_challenge_method"))
-		}
-		if r.FormValue("nonce") == "" {
-			t.Error("device code: missing nonce")
-		}
-		if r.FormValue("machine_id") == "" {
-			t.Error("device code: missing machine_id")
-		}
-		if r.FormValue("client_id") == "" {
-			t.Error("device code: missing client_id")
-		}
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{
-			"device_code": "dc-test-123",
-			"user_code": "ABCD-1234",
-			"verification_uri": "https://qoder.com/activate",
-			"expires_in": 900,
-			"interval": 5
-		}`)
-	})
-
-	mux.HandleFunc("/oauth/token", func(w http.ResponseWriter, r *http.Request) {
-		callCount.Add(1)
 		cfg.tokenHandler(w, r, cfg)
 	})
 
@@ -100,9 +72,9 @@ func withPendingThenSuccess(n int, accessToken, refreshToken string) func(*fakeC
 			}
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprintf(w, `{
-				"access_token": %q,
+				"token": %q,
 				"refresh_token": %q,
-				"token_type": "bearer",
+				"user_id": "user-test",
 				"expires_in": 3600,
 				"scope": "openid"
 			}`, accessToken, refreshToken)
@@ -157,11 +129,11 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.BaseURL != "https://qoder.com" {
 		t.Fatalf("BaseURL=%q", cfg.BaseURL)
 	}
-	if cfg.DeviceCodePath != "/oauth/device/code" {
-		t.Fatalf("DeviceCodePath=%q", cfg.DeviceCodePath)
+	if cfg.APIBaseURL != "https://openapi.qoder.sh" {
+		t.Fatalf("APIBaseURL=%q", cfg.APIBaseURL)
 	}
-	if cfg.TokenPath != "/oauth/token" {
-		t.Fatalf("TokenPath=%q", cfg.TokenPath)
+	if cfg.DevicePath != "/device/selectAccounts" || cfg.PollPath != "/api/v1/deviceToken/poll" {
+		t.Fatalf("device paths=%q %q", cfg.DevicePath, cfg.PollPath)
 	}
 	if cfg.ClientID != "qoder-cpa" {
 		t.Fatalf("ClientID=%q", cfg.ClientID)

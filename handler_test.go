@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 )
 
 func TestHandleMethodUnknownReturnsTypedError(t *testing.T) {
@@ -112,5 +114,32 @@ func TestHandleMethodRegisterReturnsSchema6(t *testing.T) {
 	}
 	if reg.SchemaVersion != 6 {
 		t.Fatalf("schema=%d, want 6", reg.SchemaVersion)
+	}
+}
+
+func TestManagementRegisterReturnsSerializableRoutesAndResource(t *testing.T) {
+	raw, err := handleMethod(pluginabi.MethodManagementRegister, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var envelope struct {
+		OK     bool            `json:"ok"`
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !envelope.OK {
+		t.Fatalf("envelope=%s", raw)
+	}
+	var result struct {
+		Routes    []struct{ Method, Path string } `json:"routes"`
+		Resources []struct{ Path, Menu string }   `json:"resources"`
+	}
+	if err := json.Unmarshal(envelope.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Routes) != 2 || result.Routes[0].Path == "" || len(result.Resources) != 1 || result.Resources[0].Path != "/index.html" {
+		t.Fatalf("registration=%s", envelope.Result)
 	}
 }

@@ -63,8 +63,9 @@ func ResolveProfile(raw string) (TransportProfile, error) {
 
 // StreamRequest is the minimal transport-neutral input for a chat request.
 type StreamRequest struct {
-	Body []byte // raw JSON chat body
-	ID   string // request ID for tracing
+	Body      []byte // raw JSON chat body
+	ID        string // request ID for tracing
+	SessionID string
 }
 
 // StreamHandle is a minimal opaque handle to an active stream.

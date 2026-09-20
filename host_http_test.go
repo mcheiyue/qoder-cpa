@@ -68,3 +68,51 @@ func TestHostHTTPResponseAcceptsSnakeCase(t *testing.T) {
 		t.Fatalf("response=%#v", response)
 	}
 }
+
+func TestHostHTTPClientStreamsThroughHostCallbacks(t *testing.T) {
+	previous := hostJSONCall
+	t.Cleanup(func() { hostJSONCall = previous })
+	reads := 0
+	closed := false
+	hostJSONCall = func(method string, payload any) (json.RawMessage, error) {
+		switch method {
+		case pluginabi.MethodHostHTTPDoStream:
+			return json.RawMessage(`{"status_code":200,"headers":{"Content-Type":["text/event-stream"]},"stream_id":"up-1"}`), nil
+		case pluginabi.MethodHostHTTPStreamRead:
+			reads++
+			if reads == 1 {
+				return json.RawMessage(`{"payload":"ZGF0YTogb25lXG5cblxu","done":false}`), nil
+			}
+			return json.RawMessage(`{"payload":"ZGF0YTogW0RPTkVdXG5cblxu","done":true}`), nil
+		case pluginabi.MethodHostHTTPStreamClose:
+			closed = true
+			return json.RawMessage(`{}`), nil
+		default:
+			t.Fatalf("method=%q", method)
+			return nil, nil
+		}
+	}
+	client, err := newHostHTTPClient("cb-stream")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://qoder.test/chat", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept", "text/event-stream")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := resp.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if reads != 2 || !closed || !strings.Contains(string(body), "[DONE]") {
+		t.Fatalf("reads=%d closed=%v body=%q", reads, closed, body)
+	}
+}

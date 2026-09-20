@@ -124,12 +124,16 @@ func TestNewMachineID_Format(t *testing.T) {
 
 func TestFromCredential_Roundtrip(t *testing.T) {
 	cred := Credential{
-		AccessToken:  "at-abc",
-		RefreshToken: "rt-def",
-		ExpiresAt:    time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
-		UserID:       "u123",
-		Email:        "test@qoder.com",
-		Profile:      TransportProfileCosyAPI2,
+		AccessToken:      "at-abc",
+		RefreshToken:     "rt-def",
+		ExpiresAt:        time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		UserID:           "u123",
+		Email:            "test@qoder.com",
+		Profile:          TransportProfileCosyAPI2,
+		OrganizationID:   "org-1",
+		OrganizationTags: []string{"team"},
+		RuntimeInfo:      "runtime-info",
+		RuntimeKey:       "runtime-key",
 	}
 	sj := FromCredential(cred)
 	back := sj.ToCredential()
@@ -150,6 +154,12 @@ func TestFromCredential_Roundtrip(t *testing.T) {
 	}
 	if back.Profile != cred.Profile {
 		t.Fatalf("Profile: %q != %q", back.Profile, cred.Profile)
+	}
+	if back.OrganizationID != cred.OrganizationID || len(back.OrganizationTags) != 1 || back.OrganizationTags[0] != "team" {
+		t.Fatalf("organization fields changed: %#v", back)
+	}
+	if back.RuntimeInfo != cred.RuntimeInfo || back.RuntimeKey != cred.RuntimeKey {
+		t.Fatalf("runtime fields changed: %#v", back)
 	}
 }
 

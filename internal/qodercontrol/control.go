@@ -13,7 +13,7 @@ const defaultBodyLimit int64 = 1 << 20 // 1 MiB
 
 // Config holds endpoint configuration for the Qoder control plane.
 type Config struct {
-	BaseURL       string        // default "https://openapi.qoder.com"
+	BaseURL       string        // default "https://openapi.qoder.sh"
 	AllowInsecure bool          // test-only: allow HTTP loopback
 	AllowedHosts  []string      // production allowlist
 	BodyLimit     int64         // max response body; default 1 MiB
@@ -23,8 +23,8 @@ type Config struct {
 // DefaultConfig returns the official Qoder HTTPS endpoints.
 func DefaultConfig() Config {
 	return Config{
-		BaseURL:      "https://openapi.qoder.com",
-		AllowedHosts: []string{"openapi.qoder.com"},
+		BaseURL:      "https://openapi.qoder.sh",
+		AllowedHosts: []string{"openapi.qoder.sh"},
 		BodyLimit:    defaultBodyLimit,
 		Timeout:      30 * time.Second,
 	}

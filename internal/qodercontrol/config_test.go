@@ -8,8 +8,8 @@ import (
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
-	if cfg.BaseURL != "https://openapi.qoder.com" {
-		t.Errorf("BaseURL=%q, want https://openapi.qoder.com", cfg.BaseURL)
+	if cfg.BaseURL != "https://openapi.qoder.sh" {
+		t.Errorf("BaseURL=%q, want https://openapi.qoder.sh", cfg.BaseURL)
 	}
 	if cfg.BodyLimit != defaultBodyLimit {
 		t.Errorf("BodyLimit=%d, want %d", cfg.BodyLimit, defaultBodyLimit)
@@ -21,8 +21,8 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestNewClient_NilHTTPClient(t *testing.T) {
 	c, err := NewClient(nil, Config{
-		BaseURL:      "https://openapi.qoder.com",
-		AllowedHosts: []string{"openapi.qoder.com"},
+		BaseURL:      "https://openapi.qoder.sh",
+		AllowedHosts: []string{"openapi.qoder.sh"},
 	})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
@@ -33,19 +33,19 @@ func TestNewClient_NilHTTPClient(t *testing.T) {
 }
 
 func TestNewClient_EmptyBaseURL(t *testing.T) {
-	c, err := NewClient(nil, Config{AllowedHosts: []string{"openapi.qoder.com"}})
+	c, err := NewClient(nil, Config{AllowedHosts: []string{"openapi.qoder.sh"}})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	if c.config.BaseURL != "https://openapi.qoder.com" {
+	if c.config.BaseURL != "https://openapi.qoder.sh" {
 		t.Errorf("BaseURL=%q, want default", c.config.BaseURL)
 	}
 }
 
 func TestValidateBaseURL_HTTPS(t *testing.T) {
 	cfg := Config{
-		BaseURL:      "https://openapi.qoder.com",
-		AllowedHosts: []string{"openapi.qoder.com"},
+		BaseURL:      "https://openapi.qoder.sh",
+		AllowedHosts: []string{"openapi.qoder.sh"},
 	}
 	if err := validateBaseURL(cfg); err != nil {
 		t.Errorf("validateBaseURL: %v", err)
@@ -54,8 +54,8 @@ func TestValidateBaseURL_HTTPS(t *testing.T) {
 
 func TestValidateBaseURL_RejectsHTTP(t *testing.T) {
 	cfg := Config{
-		BaseURL:      "http://openapi.qoder.com",
-		AllowedHosts: []string{"openapi.qoder.com"},
+		BaseURL:      "http://openapi.qoder.sh",
+		AllowedHosts: []string{"openapi.qoder.sh"},
 	}
 	if err := validateBaseURL(cfg); !errors.Is(err, ErrHostNotAllowed) {
 		t.Errorf("want ErrHostNotAllowed, got %v", err)
@@ -65,7 +65,7 @@ func TestValidateBaseURL_RejectsHTTP(t *testing.T) {
 func TestValidateBaseURL_Allowlist(t *testing.T) {
 	cfg := Config{
 		BaseURL:      "https://evil.example.com",
-		AllowedHosts: []string{"openapi.qoder.com"},
+		AllowedHosts: []string{"openapi.qoder.sh"},
 	}
 	if err := validateBaseURL(cfg); !errors.Is(err, ErrHostNotAllowed) {
 		t.Errorf("want ErrHostNotAllowed for non-allowlisted host, got %v", err)
@@ -74,8 +74,8 @@ func TestValidateBaseURL_Allowlist(t *testing.T) {
 
 func TestValidateBaseURL_SubdomainMatch(t *testing.T) {
 	cfg := Config{
-		BaseURL:      "https://sub.openapi.qoder.com",
-		AllowedHosts: []string{"openapi.qoder.com"},
+		BaseURL:      "https://sub.openapi.qoder.sh",
+		AllowedHosts: []string{"openapi.qoder.sh"},
 	}
 	if err := validateBaseURL(cfg); err != nil {
 		t.Errorf("subdomain should match parent allowlist: %v", err)
@@ -86,7 +86,7 @@ func TestValidateBaseURL_LoopbackInsecure(t *testing.T) {
 	cfg := Config{
 		BaseURL:       "http://127.0.0.1:9090",
 		AllowInsecure: true,
-		AllowedHosts:  []string{"openapi.qoder.com"},
+		AllowedHosts:  []string{"openapi.qoder.sh"},
 	}
 	if err := validateBaseURL(cfg); err != nil {
 		t.Errorf("loopback HTTP should be allowed with AllowInsecure: %v", err)
@@ -96,7 +96,7 @@ func TestValidateBaseURL_LoopbackInsecure(t *testing.T) {
 func TestValidateBaseURL_LoopbackRejectedInProd(t *testing.T) {
 	cfg := Config{
 		BaseURL:      "http://127.0.0.1:9090",
-		AllowedHosts: []string{"openapi.qoder.com"},
+		AllowedHosts: []string{"openapi.qoder.sh"},
 	}
 	if err := validateBaseURL(cfg); !errors.Is(err, ErrHostNotAllowed) {
 		t.Errorf("want ErrHostNotAllowed for loopback without AllowInsecure, got %v", err)
@@ -121,8 +121,8 @@ func TestValidateBaseURL_RejectsQuery(t *testing.T) {
 	// URLs with query strings must be rejected — they can smuggle
 	// auth redirects or path routing behind a trusted base.
 	cfg := Config{
-		BaseURL:      "https://openapi.qoder.com?evil=1",
-		AllowedHosts: []string{"openapi.qoder.com"},
+		BaseURL:      "https://openapi.qoder.sh?evil=1",
+		AllowedHosts: []string{"openapi.qoder.sh"},
 	}
 	if err := validateBaseURL(cfg); err == nil {
 		t.Error("want error for URL with query string")
@@ -132,8 +132,8 @@ func TestValidateBaseURL_RejectsQuery(t *testing.T) {
 func TestValidateBaseURL_RejectsFragment(t *testing.T) {
 	// URLs with fragment must be rejected for the same reason.
 	cfg := Config{
-		BaseURL:      "https://openapi.qoder.com#section",
-		AllowedHosts: []string{"openapi.qoder.com"},
+		BaseURL:      "https://openapi.qoder.sh#section",
+		AllowedHosts: []string{"openapi.qoder.sh"},
 	}
 	if err := validateBaseURL(cfg); err == nil {
 		t.Error("want error for URL with fragment")
@@ -146,11 +146,11 @@ func TestHostInAllowlist(t *testing.T) {
 		allowed []string
 		want    bool
 	}{
-		{"openapi.qoder.com", []string{"openapi.qoder.com"}, true},
-		{"sub.openapi.qoder.com", []string{"openapi.qoder.com"}, true},
-		{"evil.com", []string{"openapi.qoder.com"}, false},
-		{"openapi.qoder.com.evil.com", []string{"openapi.qoder.com"}, false},
-		{"", []string{"openapi.qoder.com"}, false},
+		{"openapi.qoder.sh", []string{"openapi.qoder.sh"}, true},
+		{"sub.openapi.qoder.sh", []string{"openapi.qoder.sh"}, true},
+		{"evil.com", []string{"openapi.qoder.sh"}, false},
+		{"openapi.qoder.sh.evil.com", []string{"openapi.qoder.sh"}, false},
+		{"", []string{"openapi.qoder.sh"}, false},
 	}
 	for _, tc := range tests {
 		if got := hostInAllowlist(tc.host, tc.allowed); got != tc.want {

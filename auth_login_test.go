@@ -41,7 +41,7 @@ func TestAuthLoginABIRoundTrip(t *testing.T) {
 	t.Cleanup(func() { hostJSONCall, defaultAuthService = previousCall, previousService })
 	defaultAuthService = authService{
 		oauthConfig: qoderauth.OAuthConfig{
-			BaseURL: "https://qoder.test", DeviceCodePath: "/device", TokenPath: "/token", ClientID: "test-client",
+			BaseURL: "https://qoder.test", APIBaseURL: "https://qoder.test", DevicePath: "/device", PollPath: "/poll", ClientID: "test-client",
 		},
 		controlConfig: qodercontrol.Config{BaseURL: "https://qoder.test", AllowedHosts: []string{"qoder.test"}},
 	}
@@ -56,7 +56,7 @@ func TestAuthLoginABIRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	start := decodeResult[pluginapi.AuthLoginStartResponse](t, startEnvelope)
-	if start.Provider != "qoder" || start.State == "" || start.URL != "https://qoder.com/device" {
+	if start.Provider != "qoder" || start.State == "" || !strings.HasPrefix(start.URL, "https://qoder.test/device?") {
 		t.Fatalf("start=%#v", start)
 	}
 
@@ -89,6 +89,9 @@ func TestAuthLoginABIRoundTrip(t *testing.T) {
 	if cred.UserID != "user-1" || cred.Profile != qoderauth.TransportProfileCosyAPI2 {
 		t.Fatalf("credential=%#v", cred)
 	}
+	if cred.RuntimeInfo == "" || cred.RuntimeKey == "" {
+		t.Fatalf("COSY runtime fields were not persisted")
+	}
 }
 
 func fakeAuthHost(t *testing.T, tokenCalls *int) func(string, any) (json.RawMessage, error) {
@@ -101,16 +104,14 @@ func fakeAuthHost(t *testing.T, tokenCalls *int) func(string, any) (json.RawMess
 		path, _ := url.Parse(httpReq.URL)
 		var body string
 		switch path.Path {
-		case "/device":
-			body = `{"device_code":"dev-1","verification_uri":"https://qoder.com/device","expires_in":900}`
-		case "/token":
+		case "/poll":
 			*tokenCalls++
 			if *tokenCalls == 1 {
 				body = `{"error":"authorization_pending","error_description":"waiting"}`
 			} else {
-				body = `{"access_token":"access-1","refresh_token":"refresh-1","expires_in":3600}`
+				body = `{"token":"access-1","refresh_token":"refresh-1","user_id":"user-1","expires_in":3600}`
 			}
-		case "/v1/user/info":
+		case "/api/v1/userinfo":
 			body = `{"user_id":"user-1","email":"alice@example.com","name":"Alice"}`
 		default:
 			t.Fatalf("unexpected URL %s", httpReq.URL)

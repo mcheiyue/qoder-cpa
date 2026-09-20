@@ -31,10 +31,9 @@ func TestConcurrentPoll_SameTransaction(t *testing.T) {
 	resetStore()
 	srv := fakeDeviceCodeServer(t, withPendingThenSuccess(3, "at", "rt"))
 	cfg := OAuthConfig{
-		BaseURL:        srv.URL,
-		DeviceCodePath: "/oauth/device/code",
-		TokenPath:      "/oauth/token",
-		ClientID:       "test",
+		BaseURL:    srv.URL,
+		APIBaseURL: srv.URL, PollPath: "/api/v1/deviceToken/poll",
+		ClientID: "test",
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
 

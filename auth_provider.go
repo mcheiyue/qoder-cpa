@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/mcheiyue/qoder-cpa/internal/qoderauth"
 	"github.com/mcheiyue/qoder-cpa/internal/qodercontrol"
+	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/cosy"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 )
 
@@ -139,7 +141,18 @@ func (s authService) poll(ctx context.Context, raw []byte) (pluginapi.AuthLoginP
 	}
 	status.Credential.UserID = profile.UserID
 	status.Credential.Email = profile.Email
+	status.Credential.OrganizationID = profile.OrganizationID
+	status.Credential.OrganizationTags = append([]string(nil), profile.OrganizationTags...)
 	status.Credential.Profile = qoderauth.TransportProfileCosyAPI2
+	runtime, err := cosy.DeriveRuntimeFields(rand.Reader, cosy.RuntimeFieldInput{
+		UID: profile.UserID, OrganizationID: profile.OrganizationID,
+		OrganizationTags: profile.OrganizationTags, DataPolicyAgreed: true,
+	})
+	if err != nil {
+		return pluginapi.AuthLoginPollResponse{}, err
+	}
+	status.Credential.RuntimeInfo = runtime.EncryptUserInfo
+	status.Credential.RuntimeKey = runtime.Key
 	data, err := authData(*status.Credential, "")
 	if err != nil {
 		return pluginapi.AuthLoginPollResponse{}, err
@@ -161,7 +174,7 @@ func (s authService) refresh(ctx context.Context, raw []byte) (pluginapi.AuthRef
 		return pluginapi.AuthRefreshResponse{}, err
 	}
 	refreshed, err := qoderauth.Refresh(ctx, qoderauth.RefreshRequest{
-		Config: qoderauth.RefreshConfig{TokenURL: s.oauthConfig.BaseURL + s.oauthConfig.TokenPath, ClientID: s.oauthConfig.ClientID},
+		Config: qoderauth.RefreshConfig{TokenURL: strings.TrimRight(s.oauthConfig.APIBaseURL, "/") + "/api/v1/deviceToken/refresh", ClientID: s.oauthConfig.ClientID},
 		Client: client, Cred: cred,
 	})
 	if err != nil {

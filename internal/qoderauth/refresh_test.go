@@ -16,21 +16,12 @@ func TestRefresh_Success(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("refresh: got method %s, want POST", r.Method)
 		}
-		if err := r.ParseForm(); err != nil {
-			t.Errorf("refresh: parse form: %v", err)
-		}
-		if r.FormValue("grant_type") != "refresh_token" {
-			t.Errorf("grant_type=%q, want refresh_token", r.FormValue("grant_type"))
-		}
-		if r.FormValue("refresh_token") == "" {
-			t.Error("missing refresh_token")
-		}
-		if r.FormValue("client_id") == "" {
-			t.Error("missing client_id")
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("content type=%q", r.Header.Get("Content-Type"))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{
-			"access_token": "new-access-tok",
+			"token": "new-access-tok",
 			"refresh_token": "new-refresh-tok",
 			"token_type": "bearer",
 			"expires_in": 3600,

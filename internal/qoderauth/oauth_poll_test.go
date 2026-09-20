@@ -12,10 +12,9 @@ func TestPollLogin_PendingThenSuccess(t *testing.T) {
 	resetStore()
 	srv := fakeDeviceCodeServer(t, withPendingThenSuccess(2, "access-tok-abc", "refresh-tok-xyz"))
 	cfg := OAuthConfig{
-		BaseURL:        srv.URL,
-		DeviceCodePath: "/oauth/device/code",
-		TokenPath:      "/oauth/token",
-		ClientID:       "test-client",
+		BaseURL:    srv.URL,
+		APIBaseURL: srv.URL, PollPath: "/api/v1/deviceToken/poll",
+		ClientID: "test-client",
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
 
@@ -87,10 +86,9 @@ func TestPollLogin_PendingThenSuccess(t *testing.T) {
 func TestPollLogin_Expired(t *testing.T) {
 	resetStore()
 	cfg := OAuthConfig{
-		BaseURL:        "http://unused",
-		DeviceCodePath: "/oauth/device/code",
-		TokenPath:      "/oauth/token",
-		ClientID:       "test",
+		BaseURL:    "http://unused",
+		APIBaseURL: "http://unused", PollPath: "/api/v1/deviceToken/poll",
+		ClientID: "test",
 	}
 
 	// Manually create an expired transaction.
@@ -141,10 +139,9 @@ func TestPollLogin_TerminalReturnsSuccess(t *testing.T) {
 
 	srv := fakeDeviceCodeServer(t, withPendingThenSuccess(0, "at", "rt"))
 	cfg := OAuthConfig{
-		BaseURL:        srv.URL,
-		DeviceCodePath: "/oauth/device/code",
-		TokenPath:      "/oauth/token",
-		ClientID:       "test",
+		BaseURL:    srv.URL,
+		APIBaseURL: srv.URL, PollPath: "/api/v1/deviceToken/poll",
+		ClientID: "test",
 	}
 
 	loginResp, err := DeviceLogin(context.Background(), DeviceLoginRequest{
@@ -185,10 +182,9 @@ func TestPollLogin_RefreshToken(t *testing.T) {
 	resetStore()
 	srv := fakeDeviceCodeServer(t, withPendingThenSuccess(0, "new-at", "new-rt"))
 	cfg := OAuthConfig{
-		BaseURL:        srv.URL,
-		DeviceCodePath: "/oauth/device/code",
-		TokenPath:      "/oauth/token",
-		ClientID:       "test",
+		BaseURL:    srv.URL,
+		APIBaseURL: srv.URL, PollPath: "/api/v1/deviceToken/poll",
+		ClientID: "test",
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
 
@@ -220,10 +216,9 @@ func TestPollLogin_MalformedJSON(t *testing.T) {
 	resetStore()
 	srv := fakeDeviceCodeServer(t, withMalformedJSON())
 	cfg := OAuthConfig{
-		BaseURL:        srv.URL,
-		DeviceCodePath: "/oauth/device/code",
-		TokenPath:      "/oauth/token",
-		ClientID:       "test",
+		BaseURL:    srv.URL,
+		APIBaseURL: srv.URL, PollPath: "/api/v1/deviceToken/poll",
+		ClientID: "test",
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
 
@@ -249,10 +244,9 @@ func TestPollLogin_AccessDenied(t *testing.T) {
 	resetStore()
 	srv := fakeDeviceCodeServer(t, withAccessDenied())
 	cfg := OAuthConfig{
-		BaseURL:        srv.URL,
-		DeviceCodePath: "/oauth/device/code",
-		TokenPath:      "/oauth/token",
-		ClientID:       "test",
+		BaseURL:    srv.URL,
+		APIBaseURL: srv.URL, PollPath: "/api/v1/deviceToken/poll",
+		ClientID: "test",
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
 
