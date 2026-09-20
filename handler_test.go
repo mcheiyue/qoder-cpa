@@ -188,6 +188,9 @@ func TestManagementHandleAcceptsCPAResourcePath(t *testing.T) {
 		t.Fatal(err)
 	}
 	response := decodeManagementResponse(t, rawResponse)
+	if response.Headers.Get("Cache-Control") != "no-store" {
+		t.Fatalf("resource cache-control = %q, want no-store", response.Headers.Get("Cache-Control"))
+	}
 	if !strings.Contains(string(response.Body), "Qoder 账号") {
 		t.Fatalf("resource body = %s", response.Body)
 	}

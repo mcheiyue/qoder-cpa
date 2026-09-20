@@ -60,7 +60,10 @@ func (h managementHandler) HandleManagement(ctx context.Context, request plugina
 	case "profile":
 		return defaultManagementService.updateProfile(ctx, request.Body)
 	case "web":
-		return pluginapi.ManagementResponse{StatusCode: http.StatusOK, Headers: http.Header{"Content-Type": {"text/html; charset=utf-8"}}, Body: qoderWebUI}, nil
+		return pluginapi.ManagementResponse{StatusCode: http.StatusOK, Headers: http.Header{
+			"Content-Type":  {"text/html; charset=utf-8"},
+			"Cache-Control": {"no-store"},
+		}, Body: qoderWebUI}, nil
 	default:
 		return pluginapi.ManagementResponse{StatusCode: http.StatusNotFound}, nil
 	}
