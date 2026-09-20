@@ -136,17 +136,19 @@ func (s authService) poll(ctx context.Context, raw []byte) (pluginapi.AuthLoginP
 		return pluginapi.AuthLoginPollResponse{}, err
 	}
 	profile, err := control.FetchProfile(ctx, *status.Credential)
-	if err != nil {
+	if err != nil && status.Credential.UserID == "" {
 		return pluginapi.AuthLoginPollResponse{}, err
 	}
-	status.Credential.UserID = profile.UserID
-	status.Credential.Email = profile.Email
-	status.Credential.OrganizationID = profile.OrganizationID
-	status.Credential.OrganizationTags = append([]string(nil), profile.OrganizationTags...)
+	if profile != nil {
+		status.Credential.UserID = profile.UserID
+		status.Credential.Email = profile.Email
+		status.Credential.OrganizationID = profile.OrganizationID
+		status.Credential.OrganizationTags = append([]string(nil), profile.OrganizationTags...)
+	}
 	status.Credential.Profile = qoderauth.TransportProfileCosyAPI2
 	runtime, err := cosy.DeriveRuntimeFields(rand.Reader, cosy.RuntimeFieldInput{
-		UID: profile.UserID, OrganizationID: profile.OrganizationID,
-		OrganizationTags: profile.OrganizationTags, DataPolicyAgreed: true,
+		UID: status.Credential.UserID, OrganizationID: status.Credential.OrganizationID,
+		OrganizationTags: status.Credential.OrganizationTags, DataPolicyAgreed: true,
 	})
 	if err != nil {
 		return pluginapi.AuthLoginPollResponse{}, err

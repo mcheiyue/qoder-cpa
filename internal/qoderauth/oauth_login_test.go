@@ -33,6 +33,9 @@ func TestDeviceLogin_Success(t *testing.T) {
 	if verifyURL.Query().Get("challenge") == "" || verifyURL.Query().Get("nonce") == "" || verifyURL.Query().Get("machine_id") != "m-test-machine" {
 		t.Fatalf("VerifyURL query=%s", verifyURL.RawQuery)
 	}
+	if verifyURL.Query().Get("directLogin") != "false" {
+		t.Fatalf("VerifyURL directLogin=%q, want false so an existing Qoder session can switch accounts", verifyURL.Query().Get("directLogin"))
+	}
 	if resp.Transaction == nil {
 		t.Fatal("Transaction is nil")
 	}

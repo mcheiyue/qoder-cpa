@@ -118,6 +118,7 @@ func DeviceLogin(ctx context.Context, req DeviceLoginRequest) (*DeviceLoginRespo
 	query.Set("challenge_method", "S256")
 	query.Set("machine_id", string(machineID))
 	query.Set("nonce", nonce)
+	query.Set("directLogin", "false")
 	verifyURL.RawQuery = query.Encode()
 
 	txnID, err := newTransactionID()

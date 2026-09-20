@@ -94,7 +94,52 @@ func TestAuthLoginABIRoundTrip(t *testing.T) {
 	}
 }
 
+func TestAuthLoginSucceedsWhenUserinfoCannotEnrichTokenIdentity(t *testing.T) {
+	previousCall := hostJSONCall
+	previousService := defaultAuthService
+	t.Cleanup(func() { hostJSONCall, defaultAuthService = previousCall, previousService })
+	defaultAuthService = authService{
+		oauthConfig: qoderauth.OAuthConfig{
+			BaseURL: "https://qoder.test", APIBaseURL: "https://qoder.test", DevicePath: "/device", PollPath: "/poll", ClientID: "test-client",
+		},
+		controlConfig: qodercontrol.Config{BaseURL: "https://qoder.test", AllowedHosts: []string{"qoder.test"}},
+	}
+	tokenCalls := 0
+	hostJSONCall = fakeAuthHostWithUserinfo(t, &tokenCalls, `{}`)
+
+	startRaw, _ := json.Marshal(rpcAuthLoginStartRequest{
+		AuthLoginStartRequest: pluginapi.AuthLoginStartRequest{Provider: "qoder"}, HostCallbackID: "cb-login",
+	})
+	startEnvelope, err := handleMethod(pluginabi.MethodAuthLoginStart, startRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := decodeResult[pluginapi.AuthLoginStartResponse](t, startEnvelope)
+	pollRaw, _ := json.Marshal(rpcAuthLoginPollRequest{
+		AuthLoginPollRequest: pluginapi.AuthLoginPollRequest{Provider: "qoder", State: start.State}, HostCallbackID: "cb-login",
+	})
+	if _, err := handleMethod(pluginabi.MethodAuthLoginPoll, pollRaw); err != nil {
+		t.Fatal(err)
+	}
+	successEnvelope, _ := handleMethod(pluginabi.MethodAuthLoginPoll, pollRaw)
+	success := decodeResult[pluginapi.AuthLoginPollResponse](t, successEnvelope)
+	if success.Status != pluginapi.AuthLoginStatusSuccess {
+		t.Fatalf("status=%q, want success when token response already contains user_id", success.Status)
+	}
+	cred, err := parseStoredCredential(success.Auth.StorageJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cred.UserID != "user-1" {
+		t.Fatalf("UserID=%q, want token identity user-1", cred.UserID)
+	}
+}
+
 func fakeAuthHost(t *testing.T, tokenCalls *int) func(string, any) (json.RawMessage, error) {
+	return fakeAuthHostWithUserinfo(t, tokenCalls, `{"user_id":"user-1","email":"alice@example.com","name":"Alice"}`)
+}
+
+func fakeAuthHostWithUserinfo(t *testing.T, tokenCalls *int, userinfo string) func(string, any) (json.RawMessage, error) {
 	t.Helper()
 	return func(method string, payload any) (json.RawMessage, error) {
 		if method != pluginabi.MethodHostHTTPDo {
@@ -112,7 +157,7 @@ func fakeAuthHost(t *testing.T, tokenCalls *int) func(string, any) (json.RawMess
 				body = `{"token":"access-1","refresh_token":"refresh-1","user_id":"user-1","expires_in":3600}`
 			}
 		case "/api/v1/userinfo":
-			body = `{"user_id":"user-1","email":"alice@example.com","name":"Alice"}`
+			body = userinfo
 		default:
 			t.Fatalf("unexpected URL %s", httpReq.URL)
 		}
