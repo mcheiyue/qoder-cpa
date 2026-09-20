@@ -14,6 +14,8 @@ func TestEmbeddedWebUISendsManagementKey(t *testing.T) {
 		"api('/qoder-auth-url')",
 		"cli-proxy-auth",
 		"managementKey",
+		"qoder-cpa-mgmt-key",
+		"mgmt-key",
 		"未检测到管理密钥",
 		"登录失败",
 	} {
