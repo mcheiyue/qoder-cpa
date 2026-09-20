@@ -188,7 +188,7 @@ func TestManagementHandleAcceptsCPAResourcePath(t *testing.T) {
 		t.Fatal(err)
 	}
 	response := decodeManagementResponse(t, rawResponse)
-	if !strings.Contains(string(response.Body), "Qoder accounts") {
+	if !strings.Contains(string(response.Body), "Qoder 账号") {
 		t.Fatalf("resource body = %s", response.Body)
 	}
 }

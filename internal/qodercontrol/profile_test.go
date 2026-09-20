@@ -42,6 +42,23 @@ func TestFetchProfile_Success(t *testing.T) {
 	}
 }
 
+func TestFetchProfile_SuccessWithQoderUID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"uid":"qoder-uid","email":"test@qoder.com"}`)
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	p, err := c.FetchProfile(context.Background(), qoderauth.Credential{AccessToken: "at"})
+	if err != nil {
+		t.Fatalf("FetchProfile: %v", err)
+	}
+	if p.UserID != "qoder-uid" {
+		t.Errorf("UserID=%q, want qoder-uid", p.UserID)
+	}
+}
+
 func TestFetchProfile_UpstreamError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)

@@ -21,6 +21,7 @@ type Profile struct {
 
 type profileResponse struct {
 	UserID           string   `json:"user_id"`
+	UID              string   `json:"uid"`
 	Email            string   `json:"email"`
 	Name             string   `json:"name"`
 	OrganizationID   string   `json:"organization_id"`
@@ -38,6 +39,9 @@ func (c *Client) FetchProfile(ctx context.Context, cred qoderauth.Credential) (*
 	var pr profileResponse
 	if err := json.Unmarshal(body, &pr); err != nil {
 		return nil, ErrNonJSONResponse
+	}
+	if pr.UserID == "" {
+		pr.UserID = pr.UID
 	}
 	if pr.UserID == "" {
 		return nil, ErrMalformedResponse
