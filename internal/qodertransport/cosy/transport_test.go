@@ -22,6 +22,12 @@ func fakeServer(t *testing.T) (*httptest.Server, *requestAssertions) {
 		a.url = r.URL.String()
 		a.authHeader = r.Header.Get("Authorization")
 		a.cosyKey = r.Header.Get("Cosy-Key")
+		a.dataPolicy = r.Header.Get("Cosy-Data-Policy")
+		a.userID = r.Header.Get("Cosy-User")
+		a.orgID = r.Header.Get("Cosy-Organization-Id")
+		a.orgTags = r.Header.Get("Cosy-Organization-Tags")
+		a.modelKey = r.Header.Get("X-Model-Key")
+		a.modelSource = r.Header.Get("X-Model-Source")
 		a.mu.Unlock()
 		w.Header().Set("Content-Type", "text/event-stream")
 		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n")
@@ -36,18 +42,25 @@ func fakeServer(t *testing.T) (*httptest.Server, *requestAssertions) {
 }
 
 type requestAssertions struct {
-	mu         sync.Mutex
-	calls      int
-	method     string
-	url        string
-	authHeader string
-	cosyKey    string
+	mu          sync.Mutex
+	calls       int
+	method      string
+	url         string
+	authHeader  string
+	cosyKey     string
+	dataPolicy  string
+	userID      string
+	orgID       string
+	orgTags     string
+	modelKey    string
+	modelSource string
 }
 
 func TestTransport_Stream_FakeServer(t *testing.T) {
 	ts, a := fakeServer(t)
 	fields := deriveTestFields(t)
-	cfg := Config{HTTPClient: ts.Client(), Endpoint: EndpointAPI2, BaseURL: ts.URL, AllowTestEndpoint: true}
+	cfg := Config{HTTPClient: ts.Client(), Endpoint: EndpointAPI2, BaseURL: ts.URL, AllowTestEndpoint: true,
+		UserID: "user-1", OrganizationID: "org-1", OrganizationTags: []string{"a", "b"}}
 	tr, err := NewTransport(cfg)
 	if err != nil {
 		t.Fatalf("NewTransport: %v", err)
@@ -60,6 +73,7 @@ func TestTransport_Stream_FakeServer(t *testing.T) {
 		RequestBody:   []byte(`{"messages":[{"role":"user","content":"hi"}]}`),
 		RequestID:     "r1",
 		CosyVersion:   "1.1.34",
+		ModelKey:      "qfmodel", ModelSource: "system",
 	})
 	if err != nil {
 		t.Fatalf("Stream: %v", err)
@@ -92,6 +106,18 @@ func TestTransport_Stream_FakeServer(t *testing.T) {
 	}
 	if key == "" {
 		t.Error("Cosy-Key missing")
+	}
+	a.mu.Lock()
+	dataPolicy, userID, orgID, orgTags, modelKey, modelSource := a.dataPolicy, a.userID, a.orgID, a.orgTags, a.modelKey, a.modelSource
+	a.mu.Unlock()
+	for name, values := range map[string][2]string{
+		"Cosy-Data-Policy": {dataPolicy, "agree"}, "Cosy-User": {userID, "user-1"},
+		"Cosy-Organization-Id": {orgID, "org-1"}, "Cosy-Organization-Tags": {orgTags, "a,b"},
+		"X-Model-Key": {modelKey, "qfmodel"}, "X-Model-Source": {modelSource, "system"},
+	} {
+		if values[0] != values[1] {
+			t.Errorf("%s: got %q, want %q", name, values[0], values[1])
+		}
 	}
 	types := make(map[SSEEventType]int)
 	for _, e := range events {

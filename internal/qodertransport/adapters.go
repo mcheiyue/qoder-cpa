@@ -17,11 +17,14 @@ const defaultCosyVersion = "1.1.34"
 
 // NewCredentialSelector builds the three explicit adapters for one account.
 func NewCredentialSelector(client *http.Client, cred qoderauth.Credential) (*Selector, error) {
-	cosy2, err := cosy.NewTransport(cosy.Config{HTTPClient: client, Endpoint: cosy.EndpointAPI2, MachineID: string(cred.MachineID)})
+	cosyConfig := func(endpoint cosy.Endpoint) cosy.Config {
+		return cosy.Config{HTTPClient: client, Endpoint: endpoint, MachineID: string(cred.MachineID), UserID: cred.UserID, OrganizationID: cred.OrganizationID, OrganizationTags: cred.OrganizationTags, DataPolicy: "agree"}
+	}
+	cosy2, err := cosy.NewTransport(cosyConfig(cosy.EndpointAPI2))
 	if err != nil {
 		return nil, err
 	}
-	cosy3, err := cosy.NewTransport(cosy.Config{HTTPClient: client, Endpoint: cosy.EndpointAPI3, MachineID: string(cred.MachineID)})
+	cosy3, err := cosy.NewTransport(cosyConfig(cosy.EndpointAPI3))
 	if err != nil {
 		return nil, err
 	}
@@ -58,6 +61,7 @@ func (a *cosyAdapter) StreamChat(ctx context.Context, req StreamRequest) (Stream
 	}
 	response, err := a.transport.Stream(ctx, cosy.StreamRequest{
 		RuntimeFields: a.runtime, RequestBody: body, RequestID: req.ID, CosyVersion: defaultCosyVersion,
+		ModelKey: input.ModelKey, ModelSource: input.ModelSource,
 	})
 	if err != nil {
 		return nil, err

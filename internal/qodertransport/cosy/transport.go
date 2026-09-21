@@ -20,6 +20,10 @@ type Transport struct {
 	httpClient *http.Client
 	endpoint   Endpoint
 	machineID  string
+	userID     string
+	orgID      string
+	orgTags    []string
+	dataPolicy string
 	baseURL    string
 	timeout    time.Duration
 	clock      Clock
@@ -30,6 +34,10 @@ type Config struct {
 	HTTPClient        *http.Client
 	Endpoint          Endpoint
 	MachineID         string
+	UserID            string
+	OrganizationID    string
+	OrganizationTags  []string
+	DataPolicy        string
 	BaseURL           string // test-only: override endpoint URL
 	Timeout           time.Duration
 	AllowTestEndpoint bool  // must be true when BaseURL is set
@@ -61,6 +69,10 @@ func NewTransport(cfg Config) (*Transport, error) {
 		timeout:    cfg.Timeout,
 		clock:      clock,
 		machineID:  cfg.MachineID,
+		userID:     cfg.UserID,
+		orgID:      cfg.OrganizationID,
+		orgTags:    append([]string(nil), cfg.OrganizationTags...),
+		dataPolicy: cfg.DataPolicy,
 	}, nil
 }
 
@@ -70,6 +82,8 @@ type StreamRequest struct {
 	RequestBody   []byte // raw JSON from BuildChatBody
 	RequestID     string
 	CosyVersion   string
+	ModelKey      string
+	ModelSource   string
 }
 
 // StreamResponse holds the SSE parser for a streaming response.
@@ -132,12 +146,30 @@ func (t *Transport) Stream(ctx context.Context, req StreamRequest) (*StreamRespo
 	httpReq.Header.Set("Cosy-Business-Product", "cli")
 	httpReq.Header.Set("Cosy-Business-Type", "agent")
 	httpReq.Header.Set("Cosy-ClientType", "5")
+	dataPolicy := t.dataPolicy
+	if dataPolicy == "" {
+		dataPolicy = "agree"
+	}
+	httpReq.Header.Set("Cosy-Data-Policy", dataPolicy)
 	httpReq.Header.Set("Cosy-Date", parts.Date)
 	httpReq.Header.Set("Cosy-Key", parts.CosyKey)
 	if t.machineID != "" {
 		httpReq.Header.Set("Cosy-MachineId", t.machineID)
 		httpReq.Header.Set("Cosy-MachineToken", t.machineID)
 		httpReq.Header.Set("Cosy-MachineType", "5")
+	}
+	if t.userID != "" {
+		httpReq.Header.Set("Cosy-User", t.userID)
+	}
+	if t.orgID != "" {
+		httpReq.Header.Set("Cosy-Organization-Id", t.orgID)
+	}
+	if len(t.orgTags) > 0 {
+		httpReq.Header.Set("Cosy-Organization-Tags", strings.Join(t.orgTags, ","))
+	}
+	if req.ModelKey != "" {
+		httpReq.Header.Set("X-Model-Key", req.ModelKey)
+		httpReq.Header.Set("X-Model-Source", req.ModelSource)
 	}
 	httpReq.Header.Set("Cosy-Scene", "assistant")
 	httpReq.Header.Set("Cosy-Version", parts.CosyVersion)
