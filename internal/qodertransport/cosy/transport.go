@@ -146,11 +146,11 @@ func (t *Transport) Stream(ctx context.Context, req StreamRequest) (*StreamRespo
 	}
 	if resp.StatusCode != http.StatusOK {
 		streamCancel()
-		// Drain and close body; read for classification only, never expose raw text.
-		readErr := drainAndClose(resp.Body)
+		body, readErr := readAndClose(resp.Body)
 		return nil, &HTTPError{
 			StatusCode: resp.StatusCode,
 			category:   classifyHTTPStatus(resp.StatusCode),
+			detail:     summarizeErrorBody(body),
 			readErr:    readErr,
 		}
 	}
@@ -192,14 +192,19 @@ func isTextEventStream(ct string) bool {
 	return rest == "" || rest[0] == ';' || rest[0] == ' '
 }
 
-func drainAndClose(body io.ReadCloser) error {
-	_, readErr := io.Copy(io.Discard, io.LimitReader(body, 64*1024))
+func readAndClose(body io.ReadCloser) ([]byte, error) {
+	data, readErr := io.ReadAll(io.LimitReader(body, 64*1024))
 	closeErr := body.Close()
 	if readErr != nil && closeErr != nil {
-		return errors.Join(readErr, closeErr)
+		return data, errors.Join(readErr, closeErr)
 	}
 	if readErr != nil {
-		return readErr
+		return data, readErr
 	}
-	return closeErr
+	return data, closeErr
+}
+
+func drainAndClose(body io.ReadCloser) error {
+	_, err := readAndClose(body)
+	return err
 }

@@ -140,6 +140,20 @@ func TestExecutorRejectsUnsupportedFormatBeforeTransport(t *testing.T) {
 	}
 }
 
+func TestExecutorAcceptsCPAOpenAIFormatAlias(t *testing.T) {
+	handle := &fakeChatHandle{chunks: executorChatChunks()}
+	transport := &fakeChatTransport{handle: handle}
+	service := testExecutorService(transport, nil)
+	request := executorRequest(t, false)
+	request.Format = "openai"
+	if _, err := service.execute(context.Background(), request); err != nil {
+		t.Fatalf("execute with CPA openai format: %v", err)
+	}
+	if transport.calls != 1 {
+		t.Fatalf("transport calls=%d, want 1", transport.calls)
+	}
+}
+
 func TestExecutorCountTokensMarksEstimate(t *testing.T) {
 	service := testExecutorService(&fakeChatTransport{}, nil)
 	response, err := service.countTokens(executorRequest(t, false))

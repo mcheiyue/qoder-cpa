@@ -1,6 +1,7 @@
 package cosy
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -25,11 +26,15 @@ const (
 type HTTPError struct {
 	StatusCode int
 	category   SecurityCategory
+	detail     string
 	readErr    error
 }
 
 func (e *HTTPError) Error() string {
-	return "cosy: HTTP " + itoa(e.StatusCode)
+	if e.detail == "" {
+		return "cosy: HTTP " + itoa(e.StatusCode)
+	}
+	return "cosy: HTTP " + itoa(e.StatusCode) + ": " + e.detail
 }
 
 // Category returns the safe error classification.
@@ -39,6 +44,38 @@ func (e *HTTPError) Category() SecurityCategory {
 
 func (e *HTTPError) Unwrap() error {
 	return e.readErr
+}
+
+func summarizeErrorBody(raw []byte) string {
+	var body struct {
+		Code    string `json:"code"`
+		Type    string `json:"type"`
+		Message string `json:"message"`
+		Error   *struct {
+			Code    string `json:"code"`
+			Type    string `json:"type"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(raw, &body) != nil {
+		return ""
+	}
+	if body.Error != nil {
+		body.Code, body.Type, body.Message = body.Error.Code, body.Error.Type, body.Error.Message
+	}
+	parts := make([]string, 0, 2)
+	if code := strings.TrimSpace(body.Code); code != "" {
+		parts = append(parts, "code="+code)
+	} else if typ := strings.TrimSpace(body.Type); typ != "" {
+		parts = append(parts, "type="+typ)
+	}
+	if message := strings.Join(strings.Fields(body.Message), " "); message != "" {
+		if len(message) > 180 {
+			message = message[:180]
+		}
+		parts = append(parts, "message="+message)
+	}
+	return strings.Join(parts, " ")
 }
 
 // InvalidContentTypeError indicates that the upstream did not return SSE.

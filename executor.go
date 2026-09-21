@@ -39,7 +39,7 @@ var defaultExecutorService = executorService{
 }
 
 func (s executorService) open(ctx context.Context, req rpcExecutorRequest) (qodertransport.StreamHandle, error) {
-	if req.Format != "chat-completions" {
+	if !isChatExecutorFormat(req.Format) {
 		return nil, &executorFailure{code: "unsupported_format", message: "qoder executor only accepts chat-completions", status: http.StatusBadRequest}
 	}
 	if req.AuthProvider != "" && !strings.EqualFold(req.AuthProvider, qoderauth.Provider) {
@@ -69,6 +69,15 @@ func (s executorService) open(ctx context.Context, req rpcExecutorRequest) (qode
 	return transport.StreamChat(ctx, qodertransport.StreamRequest{
 		Body: req.Payload, ID: requestID, SessionID: sessionID,
 	})
+}
+
+func isChatExecutorFormat(format string) bool {
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "chat-completions", "chat_completions", "openai", "openai-chat-completions", "openai_chat_completions":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s executorService) execute(ctx context.Context, req rpcExecutorRequest) (pluginapi.ExecutorResponse, error) {
@@ -124,7 +133,7 @@ func (s executorService) closeStream(streamID, message string) {
 }
 
 func (s executorService) countTokens(req rpcExecutorRequest) (pluginapi.ExecutorResponse, error) {
-	if req.Format != "chat-completions" {
+	if !isChatExecutorFormat(req.Format) {
 		return pluginapi.ExecutorResponse{}, &executorFailure{code: "unsupported_format", message: "qoder executor only accepts chat-completions", status: http.StatusBadRequest}
 	}
 	tokens := len(req.Payload) / 4
