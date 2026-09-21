@@ -98,7 +98,8 @@ func TestExecutorExecuteAggregatesSingleStream(t *testing.T) {
 }
 
 func TestExecutorExecuteStreamEmitsAndCloses(t *testing.T) {
-	handle := &fakeChatHandle{chunks: executorChatChunks()}
+	cancelled := make(chan struct{})
+	handle := &fakeChatHandle{chunks: executorChatChunks(), cancelCh: cancelled}
 	transport := &fakeChatTransport{handle: handle}
 	var emitted [][]byte
 	closed := make(chan struct{})
@@ -124,7 +125,9 @@ func TestExecutorExecuteStreamEmitsAndCloses(t *testing.T) {
 	if len(emitted) != len(handle.chunks) || string(emitted[len(emitted)-1]) != "data: [DONE]\n\n" {
 		t.Fatalf("emitted=%q", emitted)
 	}
-	if !handle.isCancelled() {
+	select {
+	case <-cancelled:
+	case <-time.After(time.Second):
 		t.Fatal("stream handle was not closed")
 	}
 }
