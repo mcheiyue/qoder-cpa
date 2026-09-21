@@ -41,6 +41,7 @@ type Credential struct {
 	RefreshToken     string
 	ExpiresAt        time.Time
 	UserID           string
+	MachineID        MachineID
 	Email            string
 	OrganizationID   string
 	OrganizationTags []string
@@ -57,6 +58,7 @@ type StorageJSON struct {
 	RefreshToken     string           `json:"refresh_token"`
 	ExpiresAt        time.Time        `json:"expires_at"`
 	UserID           string           `json:"user_id"`
+	MachineID        MachineID        `json:"machine_id,omitempty"`
 	Email            string           `json:"email"`
 	OrganizationID   string           `json:"organization_id,omitempty"`
 	OrganizationTags []string         `json:"organization_tags,omitempty"`
@@ -166,6 +168,7 @@ func FromCredential(c Credential) StorageJSON {
 		RefreshToken:     c.RefreshToken,
 		ExpiresAt:        c.ExpiresAt,
 		UserID:           c.UserID,
+		MachineID:        c.MachineID,
 		Email:            c.Email,
 		OrganizationID:   c.OrganizationID,
 		OrganizationTags: append([]string(nil), c.OrganizationTags...),
@@ -182,6 +185,7 @@ func (s StorageJSON) ToCredential() Credential {
 		RefreshToken:     s.RefreshToken,
 		ExpiresAt:        s.ExpiresAt,
 		UserID:           s.UserID,
+		MachineID:        s.MachineID,
 		Email:            s.Email,
 		OrganizationID:   s.OrganizationID,
 		OrganizationTags: append([]string(nil), s.OrganizationTags...),

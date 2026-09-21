@@ -89,6 +89,9 @@ func TestAuthLoginABIRoundTrip(t *testing.T) {
 	if cred.UserID != "user-1" || cred.Profile != qoderauth.TransportProfileCosyAPI2 {
 		t.Fatalf("credential=%#v", cred)
 	}
+	if cred.MachineID == "" {
+		t.Fatal("machine ID was not persisted")
+	}
 	if cred.RuntimeInfo == "" || cred.RuntimeKey == "" {
 		t.Fatalf("COSY runtime fields were not persisted")
 	}

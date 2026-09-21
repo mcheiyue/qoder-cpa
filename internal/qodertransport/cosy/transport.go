@@ -19,6 +19,7 @@ var ErrInvalidTestEndpoint = errors.New("cosy: BaseURL requires AllowTestEndpoin
 type Transport struct {
 	httpClient *http.Client
 	endpoint   Endpoint
+	machineID  string
 	baseURL    string
 	timeout    time.Duration
 	clock      Clock
@@ -28,6 +29,7 @@ type Transport struct {
 type Config struct {
 	HTTPClient        *http.Client
 	Endpoint          Endpoint
+	MachineID         string
 	BaseURL           string // test-only: override endpoint URL
 	Timeout           time.Duration
 	AllowTestEndpoint bool  // must be true when BaseURL is set
@@ -58,6 +60,7 @@ func NewTransport(cfg Config) (*Transport, error) {
 		baseURL:    cfg.BaseURL,
 		timeout:    cfg.Timeout,
 		clock:      clock,
+		machineID:  cfg.MachineID,
 	}, nil
 }
 
@@ -131,6 +134,11 @@ func (t *Transport) Stream(ctx context.Context, req StreamRequest) (*StreamRespo
 	httpReq.Header.Set("Cosy-ClientType", "5")
 	httpReq.Header.Set("Cosy-Date", parts.Date)
 	httpReq.Header.Set("Cosy-Key", parts.CosyKey)
+	if t.machineID != "" {
+		httpReq.Header.Set("Cosy-MachineId", t.machineID)
+		httpReq.Header.Set("Cosy-MachineToken", t.machineID)
+		httpReq.Header.Set("Cosy-MachineType", "5")
+	}
 	httpReq.Header.Set("Cosy-Scene", "assistant")
 	httpReq.Header.Set("Cosy-Version", parts.CosyVersion)
 	httpReq.Header.Set("Login-Version", "v2")

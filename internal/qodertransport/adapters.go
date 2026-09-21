@@ -17,11 +17,11 @@ const defaultCosyVersion = "1.1.34"
 
 // NewCredentialSelector builds the three explicit adapters for one account.
 func NewCredentialSelector(client *http.Client, cred qoderauth.Credential) (*Selector, error) {
-	cosy2, err := cosy.NewTransport(cosy.Config{HTTPClient: client, Endpoint: cosy.EndpointAPI2})
+	cosy2, err := cosy.NewTransport(cosy.Config{HTTPClient: client, Endpoint: cosy.EndpointAPI2, MachineID: string(cred.MachineID)})
 	if err != nil {
 		return nil, err
 	}
-	cosy3, err := cosy.NewTransport(cosy.Config{HTTPClient: client, Endpoint: cosy.EndpointAPI3})
+	cosy3, err := cosy.NewTransport(cosy.Config{HTTPClient: client, Endpoint: cosy.EndpointAPI3, MachineID: string(cred.MachineID)})
 	if err != nil {
 		return nil, err
 	}
@@ -174,8 +174,11 @@ func (h *bearerHandle) ReadChunk() ([]byte, error) {
 
 func (h *bearerHandle) Cancel() { h.response.Cancel() }
 
-func streamError(code int) error {
-	return fmt.Errorf("qodertransport: upstream stream error %d", code)
+func streamError(code int, category string) error {
+	if category == "" {
+		return fmt.Errorf("qodertransport: upstream stream error %d", code)
+	}
+	return fmt.Errorf("qodertransport: upstream stream error %d (%s)", code, category)
 }
 
 var errUnknownStream = errors.New("qodertransport: upstream stream error")

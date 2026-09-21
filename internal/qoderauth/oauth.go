@@ -204,6 +204,7 @@ func PollLogin(ctx context.Context, req PollLoginRequest) (*PollStatus, error) {
 			RefreshToken: tokResp.RefreshToken,
 			ExpiresAt:    expiresAt,
 			UserID:       tokResp.UserID,
+			MachineID:    txn.Machine,
 		}
 		txn.Status = TransactionSuccess
 		txn.Credential = cred

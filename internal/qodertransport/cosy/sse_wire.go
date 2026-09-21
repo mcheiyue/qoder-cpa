@@ -66,7 +66,7 @@ type wireError struct {
 // If the message is not in the map, we return a generic category.
 func safeErrorCategory(msg string) string {
 	lower := strings.ToLower(strings.ReplaceAll(msg, " ", "_"))
-	safe := []string{"access_denied", "rate_limited", "upstream_error", "queue_full", "timeout", "invalid_request", "context_length_exceeded"}
+	safe := []string{"access_denied", "rate_limited", "upstream_error", "queue_full", "timeout", "invalid_request", "context_length_exceeded", "signature_invalid"}
 	for _, cat := range safe {
 		if strings.Contains(lower, cat) {
 			return cat

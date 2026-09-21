@@ -22,7 +22,7 @@ func TestManagementAccountsRedactsCredentialMaterial(t *testing.T) {
 				AuthIndex: "qoder-1", Name: "qoder.json", Provider: "qoder", Label: "Qoder", Email: "a@qoder.test",
 			}}})
 		case pluginabi.MethodHostAuthGet:
-			return json.Marshal(pluginapi.HostAuthGetResponse{AuthIndex: "qoder-1", JSON: mustJSON(qoderauth.StorageJSON{UserID: "user", AccessToken: "redacted", Profile: qoderauth.TransportProfileBearerOpenAI})})
+			return json.Marshal(pluginapi.HostAuthGetResponse{AuthIndex: "qoder-1", JSON: mustJSON(qoderauth.StorageJSON{UserID: "user", AccessToken: "redacted", Profile: qoderauth.TransportProfileBearerOpenAI, MachineID: "m-test"})})
 		default:
 			t.Fatalf("method=%q payload=%v", method, payload)
 			return nil, nil

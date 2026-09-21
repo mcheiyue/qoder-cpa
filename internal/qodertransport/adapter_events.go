@@ -38,7 +38,7 @@ func cosyEventChunk(id, model string, event cosy.SSEEvent, state *handleState) (
 		if event.StreamError == nil {
 			return nil, false, errUnknownStream
 		}
-		return nil, false, streamError(event.StreamError.Code)
+		return nil, false, streamError(event.StreamError.Code, event.StreamError.Message)
 	default:
 		return nil, false, nil
 	}
@@ -77,7 +77,7 @@ func bearerEventChunk(id, model string, event bearer.SSEEvent, state *handleStat
 		if event.StreamError == nil {
 			return nil, false, errUnknownStream
 		}
-		return nil, false, streamError(event.StreamError.Code)
+		return nil, false, streamError(event.StreamError.Code, event.StreamError.Message)
 	default:
 		return nil, false, nil
 	}

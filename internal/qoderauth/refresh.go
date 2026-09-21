@@ -174,6 +174,7 @@ func doRefresh(ctx context.Context, req RefreshRequest) (*RefreshResponse, error
 			RefreshToken:     refreshToken,
 			ExpiresAt:        now.Add(time.Duration(tokResp.ExpiresIn) * time.Second),
 			UserID:           req.Cred.UserID,
+			MachineID:        req.Cred.MachineID,
 			Email:            req.Cred.Email,
 			OrganizationID:   req.Cred.OrganizationID,
 			OrganizationTags: append([]string(nil), req.Cred.OrganizationTags...),

@@ -101,6 +101,17 @@ func TestSSEParser_BusinessErrorCodeString(t *testing.T) {
 	}
 }
 
+func TestSSEParser_SignatureErrorCategory(t *testing.T) {
+	parser := NewSSEParser(strings.NewReader("data: {\"code\":101,\"message\":\"signature invalid\"}\n\n"))
+	event, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if event.StreamError == nil || event.StreamError.Message != "signature_invalid" {
+		t.Fatalf("event=%+v, want signature_invalid", event)
+	}
+}
+
 // --- helpers ---
 
 type chunkReader struct {

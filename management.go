@@ -36,6 +36,7 @@ type managementAccount struct {
 	Profile   string `json:"transport_profile,omitempty"`
 	Status    string `json:"status,omitempty"`
 	Disabled  bool   `json:"disabled,omitempty"`
+	NeedsAuth bool   `json:"needs_reauth,omitempty"`
 }
 
 type profileUpdateRequest struct {
@@ -95,6 +96,16 @@ func (s *managementService) accounts(_ context.Context) (pluginapi.ManagementRes
 				if json.Unmarshal(rawAuth, &auth) == nil && json.Unmarshal(auth.JSON, &storage) == nil && qoderauth.IsValidProfile(storage.Profile) {
 					profile = storage.Profile
 				}
+				needsReauth := false
+				if json.Unmarshal(rawAuth, &auth) == nil && json.Unmarshal(auth.JSON, &storage) == nil {
+					needsReauth = storage.MachineID == ""
+				}
+				accounts = append(accounts, managementAccount{
+					AuthIndex: file.AuthIndex, Name: file.Name, Label: file.Label,
+					Email: file.Email, Profile: string(profile), Status: file.Status, Disabled: file.Disabled,
+					NeedsAuth: needsReauth,
+				})
+				continue
 			}
 		}
 		accounts = append(accounts, managementAccount{
