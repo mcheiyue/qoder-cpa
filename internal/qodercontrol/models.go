@@ -1,11 +1,16 @@
 package qodercontrol
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/mcheiyue/qoder-cpa/internal/qoderauth"
+	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/cosy"
 )
 
 // Model describes a model in the Qoder catalog.
@@ -22,6 +27,9 @@ type modelsResponse struct {
 // Returns an empty slice on empty response (no fake models).
 // Returns ErrModelUnavailable on upstream failure.
 func (c *Client) FetchModels(ctx context.Context, cred qoderauth.Credential) ([]Model, error) {
+	if cred.RuntimeInfo != "" && cred.RuntimeKey != "" {
+		return c.fetchSignedModels(ctx, cred)
+	}
 	body, err := c.doRequest(ctx, http.MethodGet, c.buildURL("/v1/models"), cred.AccessToken)
 	if err != nil {
 		if _, ok := err.(*UpstreamError); ok {
@@ -37,4 +45,98 @@ func (c *Client) FetchModels(ctx context.Context, cred qoderauth.Credential) ([]
 		return nil, ErrModelUnavailable
 	}
 	return mr.Data, nil
+}
+
+func (c *Client) fetchSignedModels(ctx context.Context, cred qoderauth.Credential) ([]Model, error) {
+	ep := cosy.EndpointAPI2
+	if cred.Profile == qoderauth.TransportProfileCosyAPI3 {
+		ep = cosy.EndpointAPI3
+	}
+	parts, err := cosy.BuildCatalogRequestAt(ep, cosy.RuntimeFields{
+		EncryptUserInfo: cred.RuntimeInfo,
+		Key:             cred.RuntimeKey,
+	}, "qoder-model-catalog", "0.1.9", time.Now())
+	if err != nil {
+		return nil, ErrModelUnavailable
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parts.URL, nil)
+	if err != nil {
+		return nil, ErrModelUnavailable
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", parts.Authorization)
+	req.Header.Set("Cosy-Business-Product", "cli")
+	req.Header.Set("Cosy-Business-Type", "agent")
+	req.Header.Set("Cosy-ClientType", "5")
+	req.Header.Set("Cosy-Date", parts.Date)
+	req.Header.Set("Cosy-Key", parts.CosyKey)
+	req.Header.Set("Cosy-Scene", "assistant")
+	req.Header.Set("Cosy-Version", parts.CosyVersion)
+	req.Header.Set("Login-Version", "v2")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, ErrModelUnavailable
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, c.config.BodyLimit+1))
+	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 || int64(len(body)) > c.config.BodyLimit {
+		return nil, ErrModelUnavailable
+	}
+	models, err := parseCatalog(body)
+	if err != nil || len(models) == 0 {
+		return nil, ErrModelUnavailable
+	}
+	return models, nil
+}
+
+func parseCatalog(raw []byte) ([]Model, error) {
+	var value any
+	if err := json.Unmarshal(bytes.TrimSpace(raw), &value); err != nil {
+		return nil, err
+	}
+	return collectModels(value), nil
+}
+
+func collectModels(value any) []Model {
+	seen := map[string]struct{}{}
+	models := make([]Model, 0)
+	var visit func(any)
+	visit = func(node any) {
+		switch typed := node.(type) {
+		case []any:
+			for _, item := range typed {
+				visit(item)
+			}
+		case map[string]any:
+			id := strings.TrimSpace(stringValue(typed["key"]))
+			if id == "" {
+				id = strings.TrimSpace(stringValue(typed["id"]))
+			}
+			if id != "" && (typed["name"] != nil || typed["display_name"] != nil || typed["displayName"] != nil) {
+				if _, ok := seen[id]; !ok {
+					seen[id] = struct{}{}
+					models = append(models, Model{ID: id, Name: firstString(typed["name"], typed["display_name"], typed["displayName"])})
+				}
+			}
+			for _, child := range typed {
+				visit(child)
+			}
+		}
+	}
+	visit(value)
+	return models
+}
+
+func stringValue(value any) string {
+	s, _ := value.(string)
+	return s
+}
+
+func firstString(values ...any) string {
+	for _, value := range values {
+		if s := strings.TrimSpace(stringValue(value)); s != "" {
+			return s
+		}
+	}
+	return ""
 }

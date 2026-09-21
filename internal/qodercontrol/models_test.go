@@ -114,3 +114,17 @@ func TestFetchModels_NoFakeModels(t *testing.T) {
 		t.Errorf("want nil models on failure, got %v (must not fabricate)", models)
 	}
 }
+
+func TestParseCatalogNestedCapabilityGroups(t *testing.T) {
+	models, err := parseCatalog([]byte(`{"data":{"chat":[{"key":"qoder-1","name":"Qoder 1"}],"embedding":[{"key":"embed-1","name":"Embedding"}]}}`))
+	if err != nil {
+		t.Fatalf("parseCatalog: %v", err)
+	}
+	ids := map[string]bool{}
+	for _, model := range models {
+		ids[model.ID] = true
+	}
+	if len(models) != 2 || !ids["qoder-1"] || !ids["embed-1"] {
+		t.Fatalf("models=%+v, want nested catalog entries", models)
+	}
+}

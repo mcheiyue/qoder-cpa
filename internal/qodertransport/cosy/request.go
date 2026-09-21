@@ -33,6 +33,37 @@ type BuildRequestInput struct {
 	BeginAt      time.Time
 }
 
+// CatalogRequestParts contains the signed, bodyless model-catalog request.
+type CatalogRequestParts struct {
+	URL           string
+	Authorization string
+	Date          string
+	CosyKey       string
+	CosyVersion   string
+}
+
+// BuildCatalogRequestAt builds the signed model-catalog request used by the
+// Global Qoder control plane.
+func BuildCatalogRequestAt(ep Endpoint, fields RuntimeFields, requestID, cosyVersion string, now time.Time) (CatalogRequestParts, error) {
+	if !fields.Complete() {
+		return CatalogRequestParts{}, ErrIncompleteRuntimeFields
+	}
+	url, err := catalogURL(ep)
+	if err != nil {
+		return CatalogRequestParts{}, err
+	}
+	payload, err := BuildCOSYPayload(requestID, fields.EncryptUserInfo, cosyVersion)
+	if err != nil {
+		return CatalogRequestParts{}, fmt.Errorf("cosy: build catalog payload: %w", err)
+	}
+	date := strconv.FormatInt(now.Unix(), 10)
+	signature := SignRequest(payload, fields.Key, date, "", SignPath(url))
+	return CatalogRequestParts{
+		URL: url, Authorization: ComposeBearer(payload, signature),
+		Date: date, CosyKey: fields.Key, CosyVersion: cosyVersion,
+	}, nil
+}
+
 // ChatMessageIn is an incoming chat message.
 type ChatMessageIn struct {
 	Role       string
@@ -151,6 +182,17 @@ func BuildHTTPRequestAt(ep Endpoint, body []byte, fields RuntimeFields, requestI
 		CosyVersion: cosyVersion,
 		Body:        []byte(encodedBody),
 	}, nil
+}
+
+func catalogURL(ep Endpoint) (string, error) {
+	switch ep {
+	case EndpointAPI2:
+		return "https://api2.qoder.sh/algo/api/v2/model/list", nil
+	case EndpointAPI3:
+		return "https://api3.qoder.sh/algo/api/v2/model/list", nil
+	default:
+		return "", fmt.Errorf("%w: %v", ErrUnknownEndpoint, ep)
+	}
 }
 
 // BuildHTTPRequest constructs the signed HTTP request. Uses current time.
