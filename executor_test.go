@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -122,13 +123,25 @@ func TestExecutorExecuteStreamEmitsAndCloses(t *testing.T) {
 		t.Fatalf("headers=%v", response.Headers)
 	}
 	<-closed
-	if len(emitted) != len(handle.chunks) || string(emitted[len(emitted)-1]) != "data: [DONE]\n\n" {
+	if len(emitted) != len(handle.chunks)-1 || !json.Valid(emitted[0]) || strings.HasPrefix(string(emitted[0]), "data:") {
 		t.Fatalf("emitted=%q", emitted)
 	}
 	select {
 	case <-cancelled:
 	case <-time.After(time.Second):
 		t.Fatal("stream handle was not closed")
+	}
+}
+
+func TestExecutorStreamPayloadUnframesSSE(t *testing.T) {
+	payload, done, err := executorStreamPayload([]byte("data: {\"choices\":[]}\n\n"))
+	if err != nil || done || string(payload) != `{"choices":[]}` {
+		t.Fatalf("payload=%q done=%v err=%v", payload, done, err)
+	}
+
+	payload, done, err = executorStreamPayload([]byte("data: [DONE]\n\n"))
+	if err != nil || !done || payload != nil {
+		t.Fatalf("done payload=%q done=%v err=%v", payload, done, err)
 	}
 }
 

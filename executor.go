@@ -117,11 +117,33 @@ func (s executorService) pumpStream(streamID string, handle qodertransport.Strea
 			}
 			return
 		}
-		if _, err := s.hostCall(pluginabi.MethodHostStreamEmit, map[string]any{"stream_id": streamID, "payload": chunk}); err != nil {
+		payload, done, err := executorStreamPayload(chunk)
+		if err != nil {
+			s.closeStream(streamID, err.Error())
+			return
+		}
+		if done {
+			continue
+		}
+		if _, err := s.hostCall(pluginabi.MethodHostStreamEmit, map[string]any{"stream_id": streamID, "payload": payload}); err != nil {
 			s.closeStream(streamID, err.Error())
 			return
 		}
 	}
+}
+
+func executorStreamPayload(chunk []byte) ([]byte, bool, error) {
+	payload := strings.TrimSpace(string(chunk))
+	if payload == "data: [DONE]" || payload == "[DONE]" {
+		return nil, true, nil
+	}
+	if strings.HasPrefix(payload, "data:") {
+		payload = strings.TrimSpace(strings.TrimPrefix(payload, "data:"))
+	}
+	if !json.Valid([]byte(payload)) {
+		return nil, false, fmt.Errorf("invalid chat stream payload")
+	}
+	return []byte(payload), false, nil
 }
 
 func (s executorService) closeStream(streamID, message string) {
