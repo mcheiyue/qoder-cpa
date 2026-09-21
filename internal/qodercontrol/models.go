@@ -3,6 +3,8 @@ package qodercontrol
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -52,10 +54,14 @@ func (c *Client) fetchSignedModels(ctx context.Context, cred qoderauth.Credentia
 	if cred.Profile == qoderauth.TransportProfileCosyAPI3 {
 		ep = cosy.EndpointAPI3
 	}
+	requestID := make([]byte, 16)
+	if _, err := rand.Read(requestID); err != nil {
+		return nil, ErrModelUnavailable
+	}
 	parts, err := cosy.BuildCatalogRequestAt(ep, cosy.RuntimeFields{
 		EncryptUserInfo: cred.RuntimeInfo,
 		Key:             cred.RuntimeKey,
-	}, "qoder-model-catalog", "0.1.9", time.Now())
+	}, "qoder-"+hex.EncodeToString(requestID), "1.1.34", time.Now())
 	if err != nil {
 		return nil, ErrModelUnavailable
 	}
@@ -68,9 +74,17 @@ func (c *Client) fetchSignedModels(ctx context.Context, cred qoderauth.Credentia
 	req.Header.Set("Cosy-Business-Product", "cli")
 	req.Header.Set("Cosy-Business-Type", "agent")
 	req.Header.Set("Cosy-ClientType", "5")
+	req.Header.Set("Cosy-Data-Policy", "agree")
 	req.Header.Set("Cosy-Date", parts.Date)
 	req.Header.Set("Cosy-Key", parts.CosyKey)
 	req.Header.Set("Cosy-Scene", "assistant")
+	req.Header.Set("Cosy-User", cred.UserID)
+	if cred.OrganizationID != "" {
+		req.Header.Set("Cosy-Organization-Id", cred.OrganizationID)
+	}
+	if len(cred.OrganizationTags) > 0 {
+		req.Header.Set("Cosy-Organization-Tags", strings.Join(cred.OrganizationTags, ","))
+	}
 	req.Header.Set("Cosy-Version", parts.CosyVersion)
 	req.Header.Set("Login-Version", "v2")
 	resp, err := c.httpClient.Do(req)
