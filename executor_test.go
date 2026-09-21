@@ -279,13 +279,17 @@ func TestExecutorStreamEstimatesUsageWhenUpstreamOmitsIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-closed
-	var found struct {
-		Usage struct {
-			Estimated bool `json:"estimated"`
-		} `json:"usage"`
-	}
 	for _, payload := range emitted {
-		if json.Unmarshal(payload, &found) == nil && found.Usage.Estimated {
+		var found struct {
+			Choices []struct{} `json:"choices"`
+			Usage   *struct {
+				Estimated bool `json:"estimated"`
+			} `json:"usage"`
+		}
+		if json.Unmarshal(payload, &found) == nil && found.Usage != nil && found.Usage.Estimated {
+			if found.Choices == nil {
+				t.Fatalf("estimated usage chunk lacks choices: %s", payload)
+			}
 			return
 		}
 	}

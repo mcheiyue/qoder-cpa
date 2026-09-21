@@ -185,6 +185,7 @@ func (t streamUsageTracker) estimatedChunk() ([]byte, bool) {
 		return nil, false
 	}
 	payload, err := json.Marshal(map[string]any{
+		"choices": []struct{}{},
 		"usage": map[string]any{
 			"prompt_tokens":     t.inputTokens,
 			"completion_tokens": t.outputTokens,
