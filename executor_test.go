@@ -98,6 +98,28 @@ func TestExecutorExecuteAggregatesSingleStream(t *testing.T) {
 	}
 }
 
+func TestExecutorEstimatesUsageWhenUpstreamOmitsIt(t *testing.T) {
+	handle := &fakeChatHandle{chunks: executorChunksWithoutUsage()}
+	service := testExecutorService(&fakeChatTransport{handle: handle}, nil)
+	response, err := service.execute(context.Background(), executorRequest(t, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body struct {
+		Usage struct {
+			PromptTokens     int  `json:"prompt_tokens"`
+			CompletionTokens int  `json:"completion_tokens"`
+			Estimated        bool `json:"estimated"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(response.Payload, &body); err != nil {
+		t.Fatal(err)
+	}
+	if !body.Usage.Estimated || body.Usage.PromptTokens == 0 || body.Usage.CompletionTokens == 0 {
+		t.Fatalf("estimated usage=%s", response.Payload)
+	}
+}
+
 func TestExecutorExecuteStreamEmitsAndCloses(t *testing.T) {
 	cancelled := make(chan struct{})
 	handle := &fakeChatHandle{chunks: executorChatChunks(), cancelCh: cancelled}
@@ -240,6 +262,36 @@ func TestExecutorStreamEmitFailureCancelsAndCloses(t *testing.T) {
 	}
 }
 
+func TestExecutorStreamEstimatesUsageWhenUpstreamOmitsIt(t *testing.T) {
+	handle := &fakeChatHandle{chunks: executorChunksWithoutUsage()}
+	var emitted [][]byte
+	closed := make(chan struct{})
+	service := testExecutorService(&fakeChatTransport{handle: handle}, func(method string, payload any) (json.RawMessage, error) {
+		if method == pluginabi.MethodHostStreamEmit {
+			emitted = append(emitted, append([]byte(nil), payload.(map[string]any)["payload"].([]byte)...))
+		}
+		if method == pluginabi.MethodHostStreamClose {
+			close(closed)
+		}
+		return json.RawMessage(`{}`), nil
+	})
+	if _, err := service.executeStream(context.Background(), executorRequest(t, true)); err != nil {
+		t.Fatal(err)
+	}
+	<-closed
+	var found struct {
+		Usage struct {
+			Estimated bool `json:"estimated"`
+		} `json:"usage"`
+	}
+	for _, payload := range emitted {
+		if json.Unmarshal(payload, &found) == nil && found.Usage.Estimated {
+			return
+		}
+	}
+	t.Fatalf("estimated usage chunk not emitted: %q", emitted)
+}
+
 func TestExecutorABIPropagatesUpstream503(t *testing.T) {
 	previous := defaultExecutorService
 	t.Cleanup(func() { defaultExecutorService = previous })
@@ -335,6 +387,14 @@ func executorChatChunks() [][]byte {
 	return [][]byte{
 		[]byte("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"qoder/model-a\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\"},\"finish_reason\":null}]}\n\n"),
 		[]byte("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"qoder/model-a\",\"choices\":[],\"usage\":{\"prompt_tokens\":4,\"completion_tokens\":3,\"total_tokens\":7}}\n\n"),
+		[]byte("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"qoder/model-a\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"),
+		[]byte("data: [DONE]\n\n"),
+	}
+}
+
+func executorChunksWithoutUsage() [][]byte {
+	return [][]byte{
+		[]byte("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"qoder/model-a\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\"},\"finish_reason\":null}]}\n\n"),
 		[]byte("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"qoder/model-a\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"),
 		[]byte("data: [DONE]\n\n"),
 	}

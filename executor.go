@@ -86,7 +86,7 @@ func (s executorService) execute(ctx context.Context, req rpcExecutorRequest) (p
 		return pluginapi.ExecutorResponse{}, err
 	}
 	defer handle.Cancel()
-	payload, err := aggregateChat(handle)
+	payload, err := aggregateChat(handle, estimatePayloadTokens(req.Payload))
 	if err != nil {
 		return pluginapi.ExecutorResponse{}, err
 	}
@@ -101,16 +101,23 @@ func (s executorService) executeStream(ctx context.Context, req rpcExecutorReque
 	if err != nil {
 		return pluginapi.ExecutorStreamResponse{}, err
 	}
-	go s.pumpStream(req.StreamID, handle)
+	go s.pumpStream(req.StreamID, handle, estimatePayloadTokens(req.Payload))
 	return pluginapi.ExecutorStreamResponse{Headers: http.Header{"Content-Type": {"text/event-stream"}}}, nil
 }
 
-func (s executorService) pumpStream(streamID string, handle qodertransport.StreamHandle) {
+func (s executorService) pumpStream(streamID string, handle qodertransport.StreamHandle, inputTokens int) {
 	defer handle.Cancel()
+	tracker := streamUsageTracker{inputTokens: inputTokens}
 	for {
 		chunk, err := handle.ReadChunk()
 		if err != nil {
 			if err == io.EOF {
+				if usage, ok := tracker.estimatedChunk(); ok {
+					if _, emitErr := s.hostCall(pluginabi.MethodHostStreamEmit, map[string]any{"stream_id": streamID, "payload": usage}); emitErr != nil {
+						s.closeStream(streamID, emitErr.Error())
+						return
+					}
+				}
 				s.closeStream(streamID, "")
 			} else {
 				s.closeStream(streamID, err.Error())
@@ -125,11 +132,81 @@ func (s executorService) pumpStream(streamID string, handle qodertransport.Strea
 		if done {
 			continue
 		}
+		tracker.observe(payload)
 		if _, err := s.hostCall(pluginabi.MethodHostStreamEmit, map[string]any{"stream_id": streamID, "payload": payload}); err != nil {
 			s.closeStream(streamID, err.Error())
 			return
 		}
 	}
+}
+
+type streamUsageTracker struct {
+	inputTokens  int
+	outputTokens int
+	realUsage    bool
+}
+
+func (t *streamUsageTracker) observe(payload []byte) {
+	var chunk struct {
+		Usage *struct {
+			PromptTokens int `json:"prompt_tokens"`
+		} `json:"usage"`
+		Choices []struct {
+			Delta struct {
+				Content          string `json:"content"`
+				ReasoningContent string `json:"reasoning_content"`
+				ToolCalls        []struct {
+					Function struct {
+						Name      string `json:"name"`
+						Arguments string `json:"arguments"`
+					} `json:"function"`
+				} `json:"tool_calls"`
+			} `json:"delta"`
+		} `json:"choices"`
+	}
+	if json.Unmarshal(payload, &chunk) != nil {
+		return
+	}
+	if chunk.Usage != nil {
+		t.realUsage = true
+	}
+	for _, choice := range chunk.Choices {
+		t.outputTokens += estimatePayloadTokens([]byte(choice.Delta.Content))
+		t.outputTokens += estimatePayloadTokens([]byte(choice.Delta.ReasoningContent))
+		for _, tool := range choice.Delta.ToolCalls {
+			t.outputTokens += estimatePayloadTokens([]byte(tool.Function.Name))
+			t.outputTokens += estimatePayloadTokens([]byte(tool.Function.Arguments))
+		}
+	}
+}
+
+func (t streamUsageTracker) estimatedChunk() ([]byte, bool) {
+	if t.realUsage || t.inputTokens == 0 && t.outputTokens == 0 {
+		return nil, false
+	}
+	payload, err := json.Marshal(map[string]any{
+		"usage": map[string]any{
+			"prompt_tokens":     t.inputTokens,
+			"completion_tokens": t.outputTokens,
+			"total_tokens":      t.inputTokens + t.outputTokens,
+			"estimated":         true,
+		},
+	})
+	if err != nil {
+		return nil, false
+	}
+	return payload, true
+}
+
+func estimatePayloadTokens(payload []byte) int {
+	if len(payload) == 0 {
+		return 0
+	}
+	tokens := len(payload) / 4
+	if tokens == 0 {
+		return 1
+	}
+	return tokens
 }
 
 func executorStreamPayload(chunk []byte) ([]byte, bool, error) {

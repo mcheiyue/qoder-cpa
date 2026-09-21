@@ -37,9 +37,10 @@ type aggregateToolDelta struct {
 }
 
 type aggregateUsage struct {
-	PromptTokens            int `json:"prompt_tokens"`
-	CompletionTokens        int `json:"completion_tokens"`
-	TotalTokens             int `json:"total_tokens"`
+	PromptTokens            int  `json:"prompt_tokens"`
+	CompletionTokens        int  `json:"completion_tokens"`
+	TotalTokens             int  `json:"total_tokens"`
+	Estimated               bool `json:"estimated,omitempty"`
 	CompletionTokensDetails struct {
 		ReasoningTokens int `json:"reasoning_tokens"`
 	} `json:"completion_tokens_details"`
@@ -71,7 +72,7 @@ type aggregateToolCall struct {
 	} `json:"function"`
 }
 
-func aggregateChat(handle qodertransport.StreamHandle) ([]byte, error) {
+func aggregateChat(handle qodertransport.StreamHandle, inputTokens int) ([]byte, error) {
 	result := aggregateResult{Object: "chat.completion"}
 	result.Choices = append(result.Choices, struct {
 		Index   int `json:"index"`
@@ -111,6 +112,20 @@ func aggregateChat(handle qodertransport.StreamHandle) ([]byte, error) {
 	for index := 0; index < len(tools); index++ {
 		if tool := tools[index]; tool != nil {
 			result.Choices[0].Message.ToolCalls = append(result.Choices[0].Message.ToolCalls, *tool)
+		}
+	}
+	if result.Usage == nil {
+		outputTokens := estimatePayloadTokens([]byte(result.Choices[0].Message.Content))
+		outputTokens += estimatePayloadTokens([]byte(result.Choices[0].Message.ReasoningContent))
+		for _, tool := range result.Choices[0].Message.ToolCalls {
+			outputTokens += estimatePayloadTokens([]byte(tool.Function.Name))
+			outputTokens += estimatePayloadTokens([]byte(tool.Function.Arguments))
+		}
+		result.Usage = &aggregateUsage{
+			PromptTokens:     inputTokens,
+			CompletionTokens: outputTokens,
+			TotalTokens:      inputTokens + outputTokens,
+			Estimated:        true,
 		}
 	}
 	return json.Marshal(result)
