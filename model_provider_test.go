@@ -36,8 +36,12 @@ func TestModelProviderABIUsesDynamicCatalog(t *testing.T) {
 	if result.Provider != "qoder" || len(result.Models) != 3 {
 		t.Fatalf("models=%#v", result)
 	}
-	if result.Models[0].ID != "qoder/model-a" || result.Models[1].ID != "qoder/model-b" || result.Models[2].ID != "qoder/model-c" {
+	if result.Models[0].ID != "qoder/Model A" || result.Models[1].ID != "qoder/Model B" || result.Models[2].ID != "qoder/model-c" {
 		t.Fatalf("model ids=%q %q %q", result.Models[0].ID, result.Models[1].ID, result.Models[2].ID)
+	}
+	authID := string(qoderauth.AuthIDForUser("user"))
+	if got := defaultModelRegistry.resolve(authID, "qoder/Model A"); got != "model-a" {
+		t.Fatalf("model mapping=%q", got)
 	}
 	if result.Models[2].DisplayName != "model-c" {
 		t.Fatalf("fallback display name=%q, want model-c", result.Models[2].DisplayName)
@@ -46,6 +50,49 @@ func TestModelProviderABIUsesDynamicCatalog(t *testing.T) {
 	static := decodeResult[pluginapi.ModelResponse](t, staticEnvelope)
 	if static.Provider != "qoder" || len(static.Models) != 0 {
 		t.Fatalf("static models=%#v", static)
+	}
+}
+
+func TestModelProviderUsesUpstreamDisplayNameAndRegistersReverseMapping(t *testing.T) {
+	previousCall := hostJSONCall
+	previousService := defaultAuthService
+	t.Cleanup(func() { hostJSONCall, defaultAuthService = previousCall, previousService })
+	defaultAuthService.controlConfig = qodercontrol.Config{BaseURL: "https://qoder.test", AllowedHosts: []string{"qoder.test"}}
+	hostJSONCall = func(_ string, _ any) (json.RawMessage, error) {
+		return json.Marshal(pluginapi.HTTPResponse{
+			StatusCode: http.StatusOK,
+			Body:       []byte(`{"data":[{"id":"qfmodel","name":"qfmodel","display_name":"Qwen3.8-Flash"},{"id":"qnewmodel","display_name":"Qoder New"}]}`),
+		})
+	}
+	data := modelTestAuth(t)
+	authID := "auth-dynamic"
+	raw, _ := json.Marshal(rpcAuthModelRequest{
+		AuthModelRequest: pluginapi.AuthModelRequest{AuthID: authID, AuthProvider: "qoder", StorageJSON: data.StorageJSON},
+		HostCallbackID:   "cb-models",
+	})
+	envelope, err := handleMethod(pluginabi.MethodModelForAuth, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := decodeResult[pluginapi.ModelResponse](t, envelope)
+	if len(result.Models) != 2 {
+		t.Fatalf("models=%#v", result.Models)
+	}
+	byID := make(map[string]pluginapi.ModelInfo, len(result.Models))
+	for _, model := range result.Models {
+		byID[model.ID] = model
+	}
+	if byID["qoder/Qwen3.8-Flash"].ID == "" || byID["qoder/Qoder New"].ID == "" {
+		t.Fatalf("models=%#v", result.Models)
+	}
+	if byID["qoder/Qwen3.8-Flash"].Name != "qfmodel" || byID["qoder/Qwen3.8-Flash"].DisplayName != "Qwen3.8-Flash" {
+		t.Fatalf("qfmodel metadata=%#v", byID["qoder/Qwen3.8-Flash"])
+	}
+	if got := defaultModelRegistry.resolve(authID, "qoder/Qwen3.8-Flash"); got != "qfmodel" {
+		t.Fatalf("qfmodel mapping=%q", got)
+	}
+	if got := defaultModelRegistry.resolve(authID, "qoder/Qoder New"); got != "qnewmodel" {
+		t.Fatalf("new model mapping=%q", got)
 	}
 }
 
@@ -69,6 +116,40 @@ func TestModelProviderFailureDoesNotFabricateModels(t *testing.T) {
 	}
 	if result.OK || result.Error == nil || result.Error.Code != "model_error" {
 		t.Fatalf("envelope=%s", envelope)
+	}
+}
+
+func TestDisplayNameForModelUsesUpstreamName(t *testing.T) {
+	if got := displayNameForModel("qfmodel", "Qwen3.8-Flash"); got != "Qwen3.8-Flash" {
+		t.Fatalf("display name=%q", got)
+	}
+	if got := displayNameForModel("qfmodel", "qfmodel"); got != "qfmodel" {
+		t.Fatalf("missing upstream display name=%q", got)
+	}
+	if got := displayNameForModel("new-model", "New Model"); got != "New Model" {
+		t.Fatalf("upstream display name=%q", got)
+	}
+	if got := displayNameForModel("new-model", ""); got != "new-model" {
+		t.Fatalf("fallback display name=%q", got)
+	}
+}
+
+func TestPublicModelIDUsesProvidedDisplayName(t *testing.T) {
+	if got := publicModelID("Qwen3.8-Flash"); got != "qoder/Qwen3.8-Flash" {
+		t.Fatalf("public model id=%q", got)
+	}
+	if got := publicModelID("new-model"); got != "qoder/new-model" {
+		t.Fatalf("public model id=%q", got)
+	}
+}
+
+func TestUniquePublicModelIDAvoidsDisplayNameCollision(t *testing.T) {
+	mapping := map[string]string{}
+	first := uniquePublicModelID("Same Name", "model-a", mapping)
+	mapping[first] = "model-a"
+	second := uniquePublicModelID("Same Name", "model-b", mapping)
+	if first != "qoder/Same Name" || second != "qoder/model-b" {
+		t.Fatalf("public ids=%q %q", first, second)
 	}
 }
 

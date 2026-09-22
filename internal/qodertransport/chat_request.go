@@ -5,14 +5,19 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/mcheiyue/qoder-cpa/internal/qoderauth"
 	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/bearer"
 	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/cosy"
 )
 
 var errInvalidChatPayload = errors.New("qodertransport: invalid chat payload")
 
+// ModelResolver translates a client-facing Qoder model ID to its upstream key.
+type ModelResolver func(publicID string) string
+
 type chatPayload struct {
 	Model       string            `json:"model"`
+	PublicModel string            `json:"-"`
 	Messages    []chatMessageWire `json:"messages"`
 	Tools       []json.RawMessage `json:"tools"`
 	ToolChoice  json.RawMessage   `json:"tool_choice"`
@@ -29,12 +34,25 @@ type chatMessageWire struct {
 	Name       string          `json:"name"`
 }
 
-func parseChatPayload(raw []byte) (chatPayload, error) {
+func parseChatPayload(raw []byte, resolve ModelResolver) (chatPayload, error) {
 	var payload chatPayload
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return chatPayload{}, errInvalidChatPayload
 	}
-	payload.Model = strings.TrimPrefix(strings.TrimSpace(payload.Model), "qoder/")
+	rawModel := strings.TrimSpace(payload.Model)
+	if rawModel == "" {
+		return chatPayload{}, errInvalidChatPayload
+	}
+	payload.PublicModel = rawModel
+	if !strings.HasPrefix(rawModel, qoderauth.Provider+"/") {
+		payload.PublicModel = qoderauth.Provider + "/" + rawModel
+	}
+	payload.Model = strings.TrimPrefix(payload.PublicModel, qoderauth.Provider+"/")
+	if resolve != nil {
+		if internalID := strings.TrimSpace(resolve(payload.PublicModel)); internalID != "" {
+			payload.Model = internalID
+		}
+	}
 	if payload.Model == "" || len(payload.Messages) == 0 {
 		return chatPayload{}, errInvalidChatPayload
 	}

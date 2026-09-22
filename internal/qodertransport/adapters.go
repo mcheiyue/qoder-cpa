@@ -16,7 +16,7 @@ import (
 const defaultCosyVersion = "1.1.34"
 
 // NewCredentialSelector builds the three explicit adapters for one account.
-func NewCredentialSelector(client *http.Client, cred qoderauth.Credential) (*Selector, error) {
+func NewCredentialSelector(client *http.Client, cred qoderauth.Credential, resolve ModelResolver) (*Selector, error) {
 	cosyConfig := func(endpoint cosy.Endpoint) cosy.Config {
 		return cosy.Config{HTTPClient: client, Endpoint: endpoint, MachineID: string(cred.MachineID), UserID: cred.UserID, OrganizationID: cred.OrganizationID, OrganizationTags: cred.OrganizationTags, DataPolicy: "agree"}
 	}
@@ -34,19 +34,20 @@ func NewCredentialSelector(client *http.Client, cred qoderauth.Credential) (*Sel
 	}
 	runtime := cosy.RuntimeFields{EncryptUserInfo: cred.RuntimeInfo, Key: cred.RuntimeKey}
 	return NewSelector(
-		&cosyAdapter{transport: cosy2, runtime: runtime},
-		&cosyAdapter{transport: cosy3, runtime: runtime},
-		&bearerAdapter{transport: bearerTransport},
+		&cosyAdapter{transport: cosy2, runtime: runtime, resolve: resolve},
+		&cosyAdapter{transport: cosy3, runtime: runtime, resolve: resolve},
+		&bearerAdapter{transport: bearerTransport, resolve: resolve},
 	)
 }
 
 type cosyAdapter struct {
 	transport *cosy.Transport
 	runtime   cosy.RuntimeFields
+	resolve   ModelResolver
 }
 
 func (a *cosyAdapter) StreamChat(ctx context.Context, req StreamRequest) (StreamHandle, error) {
-	payload, err := parseChatPayload(req.Body)
+	payload, err := parseChatPayload(req.Body, a.resolve)
 	if err != nil {
 		return nil, err
 	}
@@ -68,16 +69,17 @@ func (a *cosyAdapter) StreamChat(ctx context.Context, req StreamRequest) (Stream
 	}
 	return &cosyHandle{
 		response:    response,
-		handleState: handleState{id: completionID(req.ID), model: "qoder/" + payload.Model},
+		handleState: handleState{id: completionID(req.ID), model: payload.PublicModel},
 	}, nil
 }
 
 type bearerAdapter struct {
 	transport *bearer.Transport
+	resolve   ModelResolver
 }
 
 func (a *bearerAdapter) StreamChat(ctx context.Context, req StreamRequest) (StreamHandle, error) {
-	payload, err := parseChatPayload(req.Body)
+	payload, err := parseChatPayload(req.Body, a.resolve)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +93,7 @@ func (a *bearerAdapter) StreamChat(ctx context.Context, req StreamRequest) (Stre
 	}
 	return &bearerHandle{
 		response:    response,
-		handleState: handleState{id: completionID(req.ID), model: "qoder/" + payload.Model},
+		handleState: handleState{id: completionID(req.ID), model: payload.PublicModel},
 	}, nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -16,12 +17,13 @@ import (
 )
 
 type managementService struct {
-	mu         sync.Mutex
-	hostCall   func(string, any) (json.RawMessage, error)
-	fetchQuota func(context.Context, qoderauth.Credential) (*qodercontrol.Quota, error)
+	mu          sync.Mutex
+	hostCall    func(string, any) (json.RawMessage, error)
+	fetchQuota  func(context.Context, qoderauth.Credential) (*qodercontrol.Quota, error)
+	fetchModels func(context.Context, qoderauth.Credential) ([]qodercontrol.Model, error)
 }
 
-var defaultManagementService = &managementService{hostCall: callHostJSON, fetchQuota: fetchManagementQuota}
+var defaultManagementService = &managementService{hostCall: callHostJSON, fetchQuota: fetchManagementQuota, fetchModels: fetchManagementModels}
 
 type managementHandler struct {
 	kind string
@@ -29,6 +31,16 @@ type managementHandler struct {
 
 type managementAccountsResponse struct {
 	Accounts []managementAccount `json:"accounts"`
+}
+
+type managementModelsResponse struct {
+	Models []managementModel `json:"models"`
+}
+
+type managementModel struct {
+	AuthIndex   string `json:"auth_index"`
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
 }
 
 type managementAccount struct {
@@ -93,6 +105,7 @@ func managementRegister() map[string]any {
 			{"method": http.MethodGet, "path": "/qoder/accounts"},
 			{"method": http.MethodPost, "path": "/qoder/accounts/profile"},
 			{"method": http.MethodPost, "path": "/qoder/accounts/quota/refresh"},
+			{"method": http.MethodGet, "path": "/qoder/models"},
 		},
 		"resources": []map[string]string{{"path": "/index.html", "menu": "Qoder"}},
 	}
@@ -106,6 +119,8 @@ func (h managementHandler) HandleManagement(ctx context.Context, request plugina
 		return defaultManagementService.updateProfile(ctx, request.Body)
 	case "quota-refresh":
 		return defaultManagementService.refreshQuota(ctx, request.Body)
+	case "models":
+		return defaultManagementService.models(ctx)
 	case "web":
 		return pluginapi.ManagementResponse{StatusCode: http.StatusOK, Headers: http.Header{
 			"Content-Type":  {"text/html; charset=utf-8"},
@@ -114,6 +129,58 @@ func (h managementHandler) HandleManagement(ctx context.Context, request plugina
 	default:
 		return pluginapi.ManagementResponse{StatusCode: http.StatusNotFound}, nil
 	}
+}
+
+func (s *managementService) models(ctx context.Context) (pluginapi.ManagementResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	raw, err := s.hostCall(pluginabi.MethodHostAuthList, nil)
+	if err != nil {
+		return pluginapi.ManagementResponse{}, err
+	}
+	var result struct {
+		Files []pluginapi.HostAuthFileEntry `json:"files"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return pluginapi.ManagementResponse{}, fmt.Errorf("decode auth list: %w", err)
+	}
+	merged := make(map[string]managementModel)
+	for _, file := range result.Files {
+		if !strings.EqualFold(file.Provider, qoderauth.Provider) && !strings.EqualFold(file.Type, qoderauth.Provider) || file.AuthIndex == "" {
+			continue
+		}
+		rawAuth, getErr := s.hostCall(pluginabi.MethodHostAuthGet, pluginapi.HostAuthGetRequest{AuthIndex: file.AuthIndex})
+		if getErr != nil {
+			continue
+		}
+		var auth pluginapi.HostAuthGetResponse
+		var storage qoderauth.StorageJSON
+		if json.Unmarshal(rawAuth, &auth) != nil || json.Unmarshal(auth.JSON, &storage) != nil || storage.AccessToken == "" || s.fetchModels == nil {
+			continue
+		}
+		models, fetchErr := s.fetchModels(ctxOrBackground(ctx), storage.ToCredential())
+		if fetchErr != nil {
+			continue
+		}
+		for _, model := range models {
+			id := strings.TrimSpace(model.ID)
+			if id == "" {
+				continue
+			}
+			name := displayNameForModel(id, model.Name)
+			key := publicModelID(name)
+			if _, exists := merged[key]; exists {
+				continue
+			}
+			merged[key] = managementModel{AuthIndex: file.AuthIndex, ID: key, DisplayName: name}
+		}
+	}
+	models := make([]managementModel, 0, len(merged))
+	for _, model := range merged {
+		models = append(models, model)
+	}
+	sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
+	return jsonManagementResponse(http.StatusOK, managementModelsResponse{Models: models})
 }
 
 func (s *managementService) accounts(ctx context.Context) (pluginapi.ManagementResponse, error) {
@@ -195,6 +262,14 @@ func fetchManagementQuota(ctx context.Context, cred qoderauth.Credential) (*qode
 		return nil, err
 	}
 	return client.FetchQuota(ctx, cred)
+}
+
+func fetchManagementModels(ctx context.Context, cred qoderauth.Credential) ([]qodercontrol.Model, error) {
+	client, err := qodercontrol.NewClient(nil, qodercontrol.DefaultConfig())
+	if err != nil {
+		return nil, err
+	}
+	return client.FetchModels(ctx, cred)
 }
 
 func ctxOrBackground(ctx context.Context) context.Context {

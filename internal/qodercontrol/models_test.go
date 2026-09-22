@@ -137,10 +137,20 @@ func TestParseCatalogKeepsIDWhenDisplayNameMissing(t *testing.T) {
 	if len(models) != 2 {
 		t.Fatalf("models=%+v, want two entries", models)
 	}
-	if models[0].ID != "qfmodel" || models[0].Name != "" {
+	if models[0].ID != "qfmodel" || models[0].Name != "qfmodel" {
 		t.Fatalf("missing-name model=%+v", models[0])
 	}
 	if models[1].ID != "qmodel_38max" || models[1].Name != "Qoder Max" {
 		t.Fatalf("named model=%+v", models[1])
+	}
+}
+
+func TestParseCatalogPrefersDisplayNameOverInternalName(t *testing.T) {
+	models, err := parseCatalog([]byte(`{"data":[{"key":"qfmodel","name":"qfmodel","display_name":"Qwen3.8-Flash"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(models) != 1 || models[0].ID != "qfmodel" || models[0].Name != "Qwen3.8-Flash" {
+		t.Fatalf("models=%+v", models)
 	}
 }

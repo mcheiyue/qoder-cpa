@@ -38,7 +38,7 @@ func TestChatPayloadPreservesToolsAndTextParts(t *testing.T) {
 		"messages":[{"role":"user","content":[{"type":"text","text":"hello"},{"type":"input_text","text":" world"}]}],
 		"tools":[{"type":"function","function":{"name":"search","parameters":{"type":"object"}}}]
 	}`)
-	payload, err := parseChatPayload(raw)
+	payload, err := parseChatPayload(raw, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,5 +49,32 @@ func TestChatPayloadPreservesToolsAndTextParts(t *testing.T) {
 	if request.Model != "model-a" || request.Messages[0].Content != "hello world" || len(request.Tools) != 1 {
 		encoded, _ := json.Marshal(request)
 		t.Fatalf("request=%s", encoded)
+	}
+}
+
+func TestChatPayloadResolvesDynamicPublicModelAndPreservesResponseID(t *testing.T) {
+	raw := []byte(`{"model":"qoder/Qwen3.8-Flash","messages":[{"role":"user","content":"hi"}]}`)
+	payload, err := parseChatPayload(raw, func(publicID string) string {
+		if publicID == "qoder/Qwen3.8-Flash" {
+			return "qfmodel"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload.Model != "qfmodel" || payload.PublicModel != "qoder/Qwen3.8-Flash" {
+		t.Fatalf("payload=%+v", payload)
+	}
+}
+
+func TestChatPayloadUnknownModelPassesThrough(t *testing.T) {
+	raw := []byte(`{"model":"qoder/new-model","messages":[{"role":"user","content":"hi"}]}`)
+	payload, err := parseChatPayload(raw, func(string) string { return "" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload.Model != "new-model" || payload.PublicModel != "qoder/new-model" {
+		t.Fatalf("payload=%+v", payload)
 	}
 }

@@ -28,14 +28,16 @@ type transportSelector interface {
 
 type executorService struct {
 	hostCall        func(string, any) (json.RawMessage, error)
-	selectorFactory func(*http.Client, qoderauth.Credential) (transportSelector, error)
+	selectorFactory func(*http.Client, qoderauth.Credential, qodertransport.ModelResolver) (transportSelector, error)
+	registry        *modelRegistry
 }
 
 var defaultExecutorService = executorService{
 	hostCall: callHostJSON,
-	selectorFactory: func(client *http.Client, cred qoderauth.Credential) (transportSelector, error) {
-		return qodertransport.NewCredentialSelector(client, cred)
+	selectorFactory: func(client *http.Client, cred qoderauth.Credential, resolve qodertransport.ModelResolver) (transportSelector, error) {
+		return qodertransport.NewCredentialSelector(client, cred, resolve)
 	},
+	registry: defaultModelRegistry,
 }
 
 func (s executorService) open(ctx context.Context, req rpcExecutorRequest) (qodertransport.StreamHandle, error) {
@@ -53,7 +55,16 @@ func (s executorService) open(ctx context.Context, req rpcExecutorRequest) (qode
 	if err != nil {
 		return nil, &executorFailure{code: "host_unavailable", message: err.Error(), status: http.StatusBadGateway, cause: err}
 	}
-	selector, err := s.selectorFactory(client, cred)
+	registry := s.registry
+	if registry == nil {
+		registry = defaultModelRegistry
+	}
+	authID := strings.TrimSpace(req.AuthID)
+	if authID == "" {
+		authID = string(qoderauth.AuthIDForUser(cred.UserID))
+	}
+	resolve := func(publicID string) string { return registry.resolve(authID, publicID) }
+	selector, err := s.selectorFactory(client, cred, resolve)
 	if err != nil {
 		return nil, err
 	}

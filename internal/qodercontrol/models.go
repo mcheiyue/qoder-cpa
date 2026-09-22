@@ -21,6 +21,22 @@ type Model struct {
 	Name string `json:"name"`
 }
 
+func (m *Model) UnmarshalJSON(raw []byte) error {
+	var wire struct {
+		ID               string `json:"id"`
+		Key              string `json:"key"`
+		Name             string `json:"name"`
+		DisplayName      string `json:"display_name"`
+		DisplayNameCamel string `json:"displayName"`
+	}
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		return err
+	}
+	m.ID = firstString(wire.ID, wire.Key)
+	m.Name = modelDisplayName(m.ID, wire.DisplayName, wire.DisplayNameCamel, wire.Name)
+	return nil
+}
+
 type modelsResponse struct {
 	Data []Model `json:"data"`
 }
@@ -129,7 +145,7 @@ func collectModels(value any) []Model {
 			if id != "" {
 				if _, ok := seen[id]; !ok {
 					seen[id] = struct{}{}
-					models = append(models, Model{ID: id, Name: firstString(typed["name"], typed["display_name"], typed["displayName"])})
+					models = append(models, Model{ID: id, Name: modelDisplayName(id, stringValue(typed["display_name"]), stringValue(typed["displayName"]), stringValue(typed["name"]))})
 				}
 			}
 			for _, child := range typed {
@@ -139,6 +155,17 @@ func collectModels(value any) []Model {
 	}
 	visit(value)
 	return models
+}
+
+func modelDisplayName(id string, values ...string) string {
+	id = strings.TrimSpace(id)
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" && !strings.EqualFold(value, id) {
+			return value
+		}
+	}
+	return id
 }
 
 func stringValue(value any) string {

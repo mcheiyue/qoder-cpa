@@ -93,6 +93,8 @@ func managementHandle(raw []byte) ([]byte, error) {
 		kind = "profile"
 	case path == "/qoder/accounts/quota/refresh":
 		kind = "quota-refresh"
+	case path == "/qoder/models":
+		kind = "models"
 	case path == "/index.html" || strings.HasSuffix(path, "/qoder/index.html"):
 		kind = "web"
 	default:

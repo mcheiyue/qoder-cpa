@@ -44,29 +44,69 @@ func (s authService) models(ctx context.Context, raw []byte) (pluginapi.ModelRes
 	if err != nil {
 		return pluginapi.ModelResponse{}, err
 	}
-	seen := make(map[string]struct{}, len(upstream))
+	authID := strings.TrimSpace(req.AuthID)
+	if authID == "" {
+		authID = string(qoderauth.AuthIDForUser(cred.UserID))
+	}
+	mapping := make(map[string]string, len(upstream))
+	seenInternal := make(map[string]struct{}, len(upstream))
 	models := make([]pluginapi.ModelInfo, 0, len(upstream))
 	for _, model := range upstream {
-		id := strings.TrimSpace(model.ID)
-		if id == "" {
+		internalID := strings.TrimSpace(strings.TrimPrefix(model.ID, qoderauth.Provider+"/"))
+		if internalID == "" {
 			continue
 		}
-		if !strings.HasPrefix(id, qoderauth.Provider+"/") {
-			id = qoderauth.Provider + "/" + id
-		}
-		if _, exists := seen[id]; exists {
+		if _, exists := seenInternal[internalID]; exists {
 			continue
 		}
-		seen[id] = struct{}{}
-		name := strings.TrimSpace(model.Name)
-		if name == "" {
-			name = strings.TrimPrefix(id, qoderauth.Provider+"/")
+		seenInternal[internalID] = struct{}{}
+		name := displayNameForModel(internalID, model.Name)
+		publicID := uniquePublicModelID(name, internalID, mapping)
+		if publicID == "" {
+			continue
 		}
+		mapping[publicID] = internalID
 		models = append(models, pluginapi.ModelInfo{
-			ID: id, Object: "model", OwnedBy: qoderauth.Provider,
-			Name: strings.TrimPrefix(id, qoderauth.Provider+"/"), DisplayName: name,
+			ID: publicID, Object: "model", OwnedBy: qoderauth.Provider,
+			Name: internalID, DisplayName: name,
 			SupportedGenerationMethods: []string{"chat-completions"},
 		})
 	}
+	defaultModelRegistry.store(authID, mapping)
 	return pluginapi.ModelResponse{Provider: qoderauth.Provider, Models: models}, nil
+}
+
+func publicModelID(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	return qoderauth.Provider + "/" + name
+}
+
+func uniquePublicModelID(name, internalID string, mapping map[string]string) string {
+	preferred := publicModelID(name)
+	if preferred == "" {
+		return ""
+	}
+	if existing, ok := mapping[preferred]; !ok || existing == internalID {
+		return preferred
+	}
+	fallback := publicModelID(internalID)
+	if existing, ok := mapping[fallback]; !ok || existing == internalID {
+		return fallback
+	}
+	for suffix := 2; ; suffix++ {
+		candidate := publicModelID(internalID + "-" + fmt.Sprint(suffix))
+		if _, exists := mapping[candidate]; !exists {
+			return candidate
+		}
+	}
+}
+
+func displayNameForModel(id, upstreamName string) string {
+	if name := strings.TrimSpace(upstreamName); name != "" {
+		return name
+	}
+	return strings.TrimSpace(id)
 }

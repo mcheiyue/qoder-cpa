@@ -2,8 +2,9 @@
 
 ## 当前基线
 
-- 当前版本：`v0.1.21`（本地实施中，尚未发布）
-- 已完成：Device OAuth、Qoder Global COSY/Bearer transport、动态模型目录、Chat/Responses 执行器、WebUI 账号与传输配置、缺失 usage 时的估算 Token。
+- 当前版本：`v0.1.22`（本轮动态模型映射，待发布）
+- 已完成：Device OAuth、Qoder Global COSY/Bearer transport、动态模型目录、Chat/Responses 执行器、WebUI 账号与传输配置、缺失 usage 时的估算 Token、配额控制面（v0.1.21）。
+- 本轮实施：模型目录驱动的动态公开 ID 映射；Qoder 上游返回的 `key/id` 与展示名生成客户端可见模型 ID，executor 按 `AuthID` 反向还原内部 key，不需要手动修改 CPA alias 配置。
 - 当前边界：估算 Token 仅用于没有真实 usage 的响应，并标记 `estimated=true`；不伪造缓存 Token，不覆盖真实 usage。
 - 发布约束：使用 GitHub Actions 构建 Linux amd64/arm64；VPS 只部署 Release 产物，不在 VPS 编译。
 
@@ -22,9 +23,9 @@
 - 核对 Orchids-2api 当前实现和 Qoder Global 实际接口，确认 quota、plan、status 的真实 URL、鉴权方式和响应结构。
 - 重做 `internal/qodercontrol/quota.go` 的响应模型和请求路径；配额、套餐和状态统一走 `openapi.qoder.sh` 的 Bearer 控制面，不复用 Chat 的 COSY 签名 transport。
 - 扩展账号状态模型，至少覆盖：套餐、剩余额度、额度上限、Agent limit、重置时间、是否耗尽、最后刷新时间和脱敏错误状态。
-- 模型展示名自动适配：保留目录返回的真实 `key/id` 作为调用 ID，优先使用 `name`、`display_name` 或 `displayName` 作为展示名；缺失时回退为内部模型 ID，禁止通过静态猜测改写调用 ID。
+- 模型展示名自动适配：目录返回的真实 `key/id` 与 `name`、`display_name` 或 `displayName` 生成客户端可见 ID；缺失展示名时回退内部 ID。插件按 `AuthID` 保存公开 ID 到内部 key 的动态映射，发送到 Qoder 前还原内部 key；禁止手动 CPA alias 配置和静态模型猜测。
 - 扩展 management API 返回账号配额状态，并提供单账号刷新；失败不得删除或失效现有凭据。
-- 调整 `web/index.html`：在账号表展示状态摘要、配额、重置时间和刷新结果；模型相关区域同时显示友好名称与内部模型 ID，保持当前紧凑表格布局。
+- 调整 `web/index.html`：在账号表展示状态摘要、配额、重置时间和刷新结果；模型相关区域同时显示客户端可见 ID、友好名称和来源账号，保持当前紧凑表格布局。
 
 ### 不做
 
@@ -36,7 +37,7 @@
 
 - 使用本地假上游覆盖成功、字段缺失、额度耗尽、限流和接口失败。
 - COSY API2、COSY API3、Bearer profile 至少分别通过请求构造回归测试。
-- 模型目录覆盖新增模型、目录顺序变化、重复 ID、缺失展示名和 `qoder/<id>` 去重；不得因展示名变化改变调用 ID。
+- 模型目录覆盖新增模型、目录顺序变化、重复 ID、缺失展示名、展示名冲突和 `qoder/<id>` 去重；展示名变化应更新客户端可见 ID，反向映射必须仍指向当前内部 key。
 - 管理接口不返回 access token、refresh token、COSY 签名材料或请求体。
 - WebUI 能区分“额度耗尽”“刷新失败”“未刷新”和“正常”。
 - `go test ./... -shuffle=on -count=1`、`go vet ./...`、内联 JavaScript 检查和 CI race 全部通过。

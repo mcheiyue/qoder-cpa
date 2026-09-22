@@ -54,13 +54,15 @@ func (h *fakeChatHandle) isCancelled() bool {
 }
 
 type fakeChatTransport struct {
-	handle qodertransport.StreamHandle
-	err    error
-	calls  int
+	handle  qodertransport.StreamHandle
+	err     error
+	calls   int
+	request qodertransport.StreamRequest
 }
 
-func (t *fakeChatTransport) StreamChat(_ context.Context, _ qodertransport.StreamRequest) (qodertransport.StreamHandle, error) {
+func (t *fakeChatTransport) StreamChat(_ context.Context, request qodertransport.StreamRequest) (qodertransport.StreamHandle, error) {
 	t.calls++
+	t.request = request
 	return t.handle, t.err
 }
 
@@ -189,6 +191,27 @@ func TestExecutorAcceptsCPAOpenAIFormatAlias(t *testing.T) {
 	}
 	if transport.calls != 1 {
 		t.Fatalf("transport calls=%d, want 1", transport.calls)
+	}
+}
+
+func TestExecutorPassesAuthScopedModelResolver(t *testing.T) {
+	registry := newModelRegistry()
+	registry.store("qoder-user", map[string]string{"qoder/Qwen3.8-Flash": "qfmodel"})
+	transport := &fakeChatTransport{handle: &fakeChatHandle{chunks: executorChatChunks()}}
+	var resolve qodertransport.ModelResolver
+	service := executorService{
+		hostCall: func(string, any) (json.RawMessage, error) { return json.RawMessage(`{}`), nil },
+		registry: registry,
+		selectorFactory: func(_ *http.Client, _ qoderauth.Credential, modelResolve qodertransport.ModelResolver) (transportSelector, error) {
+			resolve = modelResolve
+			return fakeSelector{transport: transport}, nil
+		},
+	}
+	if _, err := service.open(context.Background(), executorRequest(t, false)); err != nil {
+		t.Fatal(err)
+	}
+	if resolve == nil || resolve("qoder/Qwen3.8-Flash") != "qfmodel" {
+		t.Fatal("executor did not pass the auth-scoped model resolver")
 	}
 }
 
@@ -356,12 +379,17 @@ func TestExecutorABIStreamResponseIsJSONSafe(t *testing.T) {
 }
 
 func testExecutorService(transport qodertransport.ChatTransport, hostCall func(string, any) (json.RawMessage, error)) executorService {
+	return testExecutorServiceWithRegistry(transport, hostCall, newModelRegistry())
+}
+
+func testExecutorServiceWithRegistry(transport qodertransport.ChatTransport, hostCall func(string, any) (json.RawMessage, error), registry *modelRegistry) executorService {
 	if hostCall == nil {
 		hostCall = func(string, any) (json.RawMessage, error) { return json.RawMessage(`{}`), nil }
 	}
 	return executorService{
 		hostCall: hostCall,
-		selectorFactory: func(*http.Client, qoderauth.Credential) (transportSelector, error) {
+		registry: registry,
+		selectorFactory: func(*http.Client, qoderauth.Credential, qodertransport.ModelResolver) (transportSelector, error) {
 			return fakeSelector{transport: transport}, nil
 		},
 	}

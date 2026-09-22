@@ -168,6 +168,47 @@ func TestManagementQuotaRefreshReturnsSnapshotAndErrorState(t *testing.T) {
 	}
 }
 
+func TestManagementModelsUsesDisplayNameWithoutChangingID(t *testing.T) {
+	previous := defaultManagementService
+	t.Cleanup(func() { defaultManagementService = previous })
+	defaultManagementService = &managementService{
+		hostCall: func(method string, payload any) (json.RawMessage, error) {
+			switch method {
+			case pluginabi.MethodHostAuthList:
+				return json.Marshal(struct {
+					Files []pluginapi.HostAuthFileEntry `json:"files"`
+				}{Files: []pluginapi.HostAuthFileEntry{{AuthIndex: "qoder-1", Provider: "qoder"}}})
+			case pluginabi.MethodHostAuthGet:
+				return json.Marshal(pluginapi.HostAuthGetResponse{AuthIndex: "qoder-1", JSON: mustJSON(qoderauth.StorageJSON{AccessToken: "secret", UserID: "u1"})})
+			default:
+				t.Fatalf("unexpected host method=%q payload=%v", method, payload)
+				return nil, nil
+			}
+		},
+		fetchModels: func(context.Context, qoderauth.Credential) ([]qodercontrol.Model, error) {
+			return []qodercontrol.Model{{ID: "qfmodel", Name: "Qwen3.8-Flash"}, {ID: "qmodel_38max", Name: "Qwen3.8 Max"}}, nil
+		},
+	}
+	response, err := (managementHandler{kind: "models"}).HandleManagement(context.Background(), pluginapi.ManagementRequest{})
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("response=%+v err=%v", response, err)
+	}
+	var body managementModelsResponse
+	if err := json.Unmarshal(response.Body, &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Models) != 2 {
+		t.Fatalf("models=%+v", body.Models)
+	}
+	byID := make(map[string]managementModel, len(body.Models))
+	for _, model := range body.Models {
+		byID[model.ID] = model
+	}
+	if byID["qoder/Qwen3.8-Flash"].DisplayName != "Qwen3.8-Flash" || byID["qoder/Qwen3.8 Max"].DisplayName != "Qwen3.8 Max" {
+		t.Fatalf("models=%+v", body.Models)
+	}
+}
+
 func containsAny(value string, needles ...string) bool {
 	for _, needle := range needles {
 		if strings.Contains(value, needle) {
