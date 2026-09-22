@@ -17,7 +17,7 @@ import (
 // TestManualQA_FakeServer runs a comprehensive fake-server manual QA covering
 // profile, models, and quota in a single server.
 func TestManualQA_FakeServer(t *testing.T) {
-	var profileHits, modelsHits, quotaHits atomic.Int32
+	var profileHits, modelsHits, usageHits, planHits, statusHits atomic.Int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify auth header on every request.
@@ -33,9 +33,15 @@ func TestManualQA_FakeServer(t *testing.T) {
 		case "/v1/models":
 			modelsHits.Add(1)
 			io.WriteString(w, `{"data":[{"id":"m1","name":"Model 1"},{"id":"m2","name":"Model 2"}]}`)
-		case "/v1/quota":
-			quotaHits.Add(1)
-			io.WriteString(w, `{"plan":"free","remaining":500,"limit":1000}`)
+		case quotaUsagePath:
+			usageHits.Add(1)
+			io.WriteString(w, `{"userQuota":{"total":1000,"used":500,"remaining":500,"unit":"credits"}}`)
+		case quotaPlanPath:
+			planHits.Add(1)
+			io.WriteString(w, `{"plan_tier_name":"Free","is_paid_plan":false}`)
+		case quotaStatusPath:
+			statusHits.Add(1)
+			io.WriteString(w, `{}`)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -77,8 +83,8 @@ func TestManualQA_FakeServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchQuota: %v", err)
 	}
-	if q.Plan != "free" {
-		t.Errorf("quota Plan=%q, want free", q.Plan)
+	if q.PlanTier != "Free" {
+		t.Errorf("quota PlanTier=%q, want Free", q.PlanTier)
 	}
 
 	// Verify call counts.
@@ -88,8 +94,8 @@ func TestManualQA_FakeServer(t *testing.T) {
 	if modelsHits.Load() != 1 {
 		t.Errorf("modelsHits=%d, want 1", modelsHits.Load())
 	}
-	if quotaHits.Load() != 1 {
-		t.Errorf("quotaHits=%d, want 1", quotaHits.Load())
+	if usageHits.Load() != 1 || planHits.Load() != 1 || statusHits.Load() != 1 {
+		t.Errorf("quota calls usage=%d plan=%d status=%d, want 1 each", usageHits.Load(), planHits.Load(), statusHits.Load())
 	}
 }
 

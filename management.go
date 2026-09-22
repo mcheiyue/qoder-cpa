@@ -7,18 +7,21 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/mcheiyue/qoder-cpa/internal/qoderauth"
+	"github.com/mcheiyue/qoder-cpa/internal/qodercontrol"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 )
 
 type managementService struct {
-	mu       sync.Mutex
-	hostCall func(string, any) (json.RawMessage, error)
+	mu         sync.Mutex
+	hostCall   func(string, any) (json.RawMessage, error)
+	fetchQuota func(context.Context, qoderauth.Credential) (*qodercontrol.Quota, error)
 }
 
-var defaultManagementService = &managementService{hostCall: callHostJSON}
+var defaultManagementService = &managementService{hostCall: callHostJSON, fetchQuota: fetchManagementQuota}
 
 type managementHandler struct {
 	kind string
@@ -29,14 +32,28 @@ type managementAccountsResponse struct {
 }
 
 type managementAccount struct {
-	AuthIndex string `json:"auth_index"`
-	Name      string `json:"name"`
-	Label     string `json:"label,omitempty"`
-	Email     string `json:"email,omitempty"`
-	Profile   string `json:"transport_profile,omitempty"`
-	Status    string `json:"status,omitempty"`
-	Disabled  bool   `json:"disabled,omitempty"`
-	NeedsAuth bool   `json:"needs_reauth,omitempty"`
+	AuthIndex     string     `json:"auth_index"`
+	Name          string     `json:"name"`
+	Label         string     `json:"label,omitempty"`
+	Email         string     `json:"email,omitempty"`
+	Profile       string     `json:"transport_profile,omitempty"`
+	Status        string     `json:"status,omitempty"`
+	Disabled      bool       `json:"disabled,omitempty"`
+	NeedsAuth     bool       `json:"needs_reauth,omitempty"`
+	PlanTier      string     `json:"plan_tier,omitempty"`
+	UserType      string     `json:"user_type,omitempty"`
+	PaidPlan      bool       `json:"paid_plan,omitempty"`
+	Remaining     float64    `json:"remaining,omitempty"`
+	Limit         float64    `json:"limit,omitempty"`
+	Used          float64    `json:"used,omitempty"`
+	AgentLimit    float64    `json:"agent_limit,omitempty"`
+	Exhausted     bool       `json:"exhausted,omitempty"`
+	Unit          string     `json:"unit,omitempty"`
+	ResetAt       *time.Time `json:"reset_at,omitempty"`
+	PeriodEnd     *time.Time `json:"period_end,omitempty"`
+	UpgradeURL    string     `json:"upgrade_url,omitempty"`
+	QuotaError    string     `json:"quota_error,omitempty"`
+	QuotaSyncedAt *time.Time `json:"quota_synced_at,omitempty"`
 }
 
 type profileUpdateRequest struct {
@@ -44,11 +61,38 @@ type profileUpdateRequest struct {
 	Profile   qoderauth.TransportProfile `json:"transport_profile"`
 }
 
+type quotaRefreshRequest struct {
+	AuthIndex string `json:"auth_index"`
+}
+
+type managementQuotaResponse struct {
+	AuthIndex string `json:"auth_index"`
+	managementQuota
+}
+
+type managementQuota struct {
+	PlanTier      string     `json:"plan_tier,omitempty"`
+	UserType      string     `json:"user_type,omitempty"`
+	PaidPlan      bool       `json:"paid_plan,omitempty"`
+	Remaining     float64    `json:"remaining,omitempty"`
+	Limit         float64    `json:"limit,omitempty"`
+	Used          float64    `json:"used,omitempty"`
+	AgentLimit    float64    `json:"agent_limit,omitempty"`
+	Exhausted     bool       `json:"exhausted,omitempty"`
+	Unit          string     `json:"unit,omitempty"`
+	ResetAt       *time.Time `json:"reset_at,omitempty"`
+	PeriodEnd     *time.Time `json:"period_end,omitempty"`
+	UpgradeURL    string     `json:"upgrade_url,omitempty"`
+	QuotaError    string     `json:"quota_error,omitempty"`
+	QuotaSyncedAt *time.Time `json:"quota_synced_at,omitempty"`
+}
+
 func managementRegister() map[string]any {
 	return map[string]any{
 		"routes": []map[string]string{
 			{"method": http.MethodGet, "path": "/qoder/accounts"},
 			{"method": http.MethodPost, "path": "/qoder/accounts/profile"},
+			{"method": http.MethodPost, "path": "/qoder/accounts/quota/refresh"},
 		},
 		"resources": []map[string]string{{"path": "/index.html", "menu": "Qoder"}},
 	}
@@ -60,6 +104,8 @@ func (h managementHandler) HandleManagement(ctx context.Context, request plugina
 		return defaultManagementService.accounts(ctx)
 	case "profile":
 		return defaultManagementService.updateProfile(ctx, request.Body)
+	case "quota-refresh":
+		return defaultManagementService.refreshQuota(ctx, request.Body)
 	case "web":
 		return pluginapi.ManagementResponse{StatusCode: http.StatusOK, Headers: http.Header{
 			"Content-Type":  {"text/html; charset=utf-8"},
@@ -70,7 +116,7 @@ func (h managementHandler) HandleManagement(ctx context.Context, request plugina
 	}
 }
 
-func (s *managementService) accounts(_ context.Context) (pluginapi.ManagementResponse, error) {
+func (s *managementService) accounts(ctx context.Context) (pluginapi.ManagementResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	raw, err := s.hostCall(pluginabi.MethodHostAuthList, nil)
@@ -89,32 +135,124 @@ func (s *managementService) accounts(_ context.Context) (pluginapi.ManagementRes
 			continue
 		}
 		profile := qoderauth.TransportProfileCosyAPI2
+		account := managementAccount{
+			AuthIndex: file.AuthIndex, Name: file.Name, Label: file.Label,
+			Email: file.Email, Profile: string(profile), Status: file.Status, Disabled: file.Disabled,
+		}
 		if file.AuthIndex != "" {
 			if rawAuth, getErr := s.hostCall(pluginabi.MethodHostAuthGet, pluginapi.HostAuthGetRequest{AuthIndex: file.AuthIndex}); getErr == nil {
 				var auth pluginapi.HostAuthGetResponse
 				var storage qoderauth.StorageJSON
-				if json.Unmarshal(rawAuth, &auth) == nil && json.Unmarshal(auth.JSON, &storage) == nil && qoderauth.IsValidProfile(storage.Profile) {
-					profile = storage.Profile
-				}
-				needsReauth := false
 				if json.Unmarshal(rawAuth, &auth) == nil && json.Unmarshal(auth.JSON, &storage) == nil {
-					needsReauth = storage.MachineID == ""
+					if qoderauth.IsValidProfile(storage.Profile) {
+						account.Profile = string(storage.Profile)
+					}
+					account.NeedsAuth = storage.MachineID == ""
+					if s.fetchQuota != nil && storage.AccessToken != "" {
+						quota, quotaErr := s.fetchQuota(ctxOrBackground(ctx), storage.ToCredential())
+						applyManagementQuota(&account, quota, quotaErr)
+					}
 				}
-				accounts = append(accounts, managementAccount{
-					AuthIndex: file.AuthIndex, Name: file.Name, Label: file.Label,
-					Email: file.Email, Profile: string(profile), Status: file.Status, Disabled: file.Disabled,
-					NeedsAuth: needsReauth,
-				})
-				continue
 			}
 		}
-		accounts = append(accounts, managementAccount{
-			AuthIndex: file.AuthIndex, Name: file.Name, Label: file.Label,
-			Email: file.Email, Profile: string(profile), Status: file.Status, Disabled: file.Disabled,
-		})
+		accounts = append(accounts, account)
 	}
 	return jsonManagementResponse(http.StatusOK, managementAccountsResponse{Accounts: accounts})
 }
+
+func (s *managementService) refreshQuota(ctx context.Context, raw []byte) (pluginapi.ManagementResponse, error) {
+	var request quotaRefreshRequest
+	if err := json.Unmarshal(raw, &request); err != nil || strings.TrimSpace(request.AuthIndex) == "" {
+		return jsonManagementError(http.StatusBadRequest, "auth_index is required"), nil
+	}
+	if s.fetchQuota == nil {
+		return jsonManagementError(http.StatusNotImplemented, "quota refresh is unavailable"), nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rawAuth, err := s.hostCall(pluginabi.MethodHostAuthGet, pluginapi.HostAuthGetRequest{AuthIndex: strings.TrimSpace(request.AuthIndex)})
+	if err != nil {
+		return jsonManagementError(http.StatusNotFound, "account not found"), nil
+	}
+	var auth pluginapi.HostAuthGetResponse
+	var storage qoderauth.StorageJSON
+	if json.Unmarshal(rawAuth, &auth) != nil || json.Unmarshal(auth.JSON, &storage) != nil || storage.AccessToken == "" {
+		return jsonManagementError(http.StatusBadRequest, "account is not a qoder credential"), nil
+	}
+	quota, quotaErr := s.fetchQuota(ctxOrBackground(ctx), storage.ToCredential())
+	response := managementQuotaResponse{AuthIndex: strings.TrimSpace(request.AuthIndex)}
+	applyManagementQuota(&response.managementQuota, quota, quotaErr)
+	if quota == nil {
+		return jsonManagementError(http.StatusBadGateway, "quota refresh failed"), nil
+	}
+	return jsonManagementResponse(http.StatusOK, response)
+}
+
+func fetchManagementQuota(ctx context.Context, cred qoderauth.Credential) (*qodercontrol.Quota, error) {
+	client, err := qodercontrol.NewClient(nil, qodercontrol.DefaultConfig())
+	if err != nil {
+		return nil, err
+	}
+	return client.FetchQuota(ctx, cred)
+}
+
+func ctxOrBackground(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
+func applyManagementQuota(target interface{ setQuota(managementQuota) }, quota *qodercontrol.Quota, quotaErr error) {
+	if quota == nil {
+		if quotaErr != nil {
+			target.setQuota(managementQuota{QuotaError: qodercontrolError(quotaErr)})
+		}
+		return
+	}
+	value := managementQuota{
+		PlanTier: quota.PlanTier, UserType: quota.UserType, PaidPlan: quota.PaidPlan,
+		Remaining: quota.Remaining, Limit: quota.Limit, Used: quota.Used, AgentLimit: quota.AgentLimit,
+		Exhausted: quota.Exhausted, Unit: quota.Unit, UpgradeURL: quota.UpgradeURL,
+		QuotaError: quota.Error,
+	}
+	if quotaErr != nil && value.QuotaError == "" {
+		value.QuotaError = qodercontrolError(quotaErr)
+	}
+	if !quota.ResetAt.IsZero() {
+		resetAt := quota.ResetAt
+		value.ResetAt = &resetAt
+	}
+	if !quota.PeriodEnd.IsZero() {
+		periodEnd := quota.PeriodEnd
+		value.PeriodEnd = &periodEnd
+	}
+	if !quota.SyncedAt.IsZero() {
+		syncedAt := quota.SyncedAt
+		value.QuotaSyncedAt = &syncedAt
+	}
+	target.setQuota(value)
+}
+
+func qodercontrolError(err error) string {
+	if err == nil {
+		return ""
+	}
+	if strings.Contains(err.Error(), "quota status unknown") {
+		return "额度状态未知"
+	}
+	return "额度刷新失败"
+}
+
+func (a *managementAccount) setQuota(quota managementQuota) {
+	a.PlanTier, a.UserType, a.PaidPlan = quota.PlanTier, quota.UserType, quota.PaidPlan
+	a.Remaining, a.Limit, a.Used, a.AgentLimit = quota.Remaining, quota.Limit, quota.Used, quota.AgentLimit
+	a.Exhausted, a.Unit, a.ResetAt, a.PeriodEnd = quota.Exhausted, quota.Unit, quota.ResetAt, quota.PeriodEnd
+	a.UpgradeURL, a.QuotaError, a.QuotaSyncedAt = quota.UpgradeURL, quota.QuotaError, quota.QuotaSyncedAt
+}
+
+func (q *managementQuota) setQuota(value managementQuota) { *q = value }
 
 func (s *managementService) updateProfile(_ context.Context, raw []byte) (pluginapi.ManagementResponse, error) {
 	var request profileUpdateRequest

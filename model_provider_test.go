@@ -20,7 +20,7 @@ func TestModelProviderABIUsesDynamicCatalog(t *testing.T) {
 	hostJSONCall = func(_ string, _ any) (json.RawMessage, error) {
 		return json.Marshal(pluginapi.HTTPResponse{
 			StatusCode: http.StatusOK,
-			Body:       []byte(`{"data":[{"id":"model-a","name":"Model A"},{"id":"model-a","name":"duplicate"},{"id":"qoder/model-b","name":"Model B"},{"id":"","name":"empty"}]}`),
+			Body:       []byte(`{"data":[{"id":"model-a","name":"Model A"},{"id":"model-a","name":"duplicate"},{"id":"qoder/model-b","name":"Model B"},{"id":"model-c"},{"id":"","name":"empty"}]}`),
 		})
 	}
 	data := modelTestAuth(t)
@@ -33,11 +33,14 @@ func TestModelProviderABIUsesDynamicCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := decodeResult[pluginapi.ModelResponse](t, envelope)
-	if result.Provider != "qoder" || len(result.Models) != 2 {
+	if result.Provider != "qoder" || len(result.Models) != 3 {
 		t.Fatalf("models=%#v", result)
 	}
-	if result.Models[0].ID != "qoder/model-a" || result.Models[1].ID != "qoder/model-b" {
-		t.Fatalf("model ids=%q %q", result.Models[0].ID, result.Models[1].ID)
+	if result.Models[0].ID != "qoder/model-a" || result.Models[1].ID != "qoder/model-b" || result.Models[2].ID != "qoder/model-c" {
+		t.Fatalf("model ids=%q %q %q", result.Models[0].ID, result.Models[1].ID, result.Models[2].ID)
+	}
+	if result.Models[2].DisplayName != "model-c" {
+		t.Fatalf("fallback display name=%q, want model-c", result.Models[2].DisplayName)
 	}
 	staticEnvelope, _ := handleMethod(pluginabi.MethodModelStatic, nil)
 	static := decodeResult[pluginapi.ModelResponse](t, staticEnvelope)

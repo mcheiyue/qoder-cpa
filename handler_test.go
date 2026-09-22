@@ -141,7 +141,7 @@ func TestManagementRegisterReturnsSerializableRoutesAndResource(t *testing.T) {
 	if err := json.Unmarshal(envelope.Result, &result); err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Routes) != 2 || result.Routes[0].Path == "" || len(result.Resources) != 1 || result.Resources[0].Path != "/index.html" {
+	if len(result.Routes) != 3 || result.Routes[0].Path == "" || len(result.Resources) != 1 || result.Resources[0].Path != "/index.html" {
 		t.Fatalf("registration=%s", envelope.Result)
 	}
 }

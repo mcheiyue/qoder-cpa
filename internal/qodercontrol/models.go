@@ -126,7 +126,7 @@ func collectModels(value any) []Model {
 			if id == "" {
 				id = strings.TrimSpace(stringValue(typed["id"]))
 			}
-			if id != "" && (typed["name"] != nil || typed["display_name"] != nil || typed["displayName"] != nil) {
+			if id != "" {
 				if _, ok := seen[id]; !ok {
 					seen[id] = struct{}{}
 					models = append(models, Model{ID: id, Name: firstString(typed["name"], typed["display_name"], typed["displayName"])})

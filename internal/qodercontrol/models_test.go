@@ -128,3 +128,19 @@ func TestParseCatalogNestedCapabilityGroups(t *testing.T) {
 		t.Fatalf("models=%+v, want nested catalog entries", models)
 	}
 }
+
+func TestParseCatalogKeepsIDWhenDisplayNameMissing(t *testing.T) {
+	models, err := parseCatalog([]byte(`{"data":[{"key":"qfmodel"},{"id":"qmodel_38max","display_name":"Qoder Max"}]}`))
+	if err != nil {
+		t.Fatalf("parseCatalog: %v", err)
+	}
+	if len(models) != 2 {
+		t.Fatalf("models=%+v, want two entries", models)
+	}
+	if models[0].ID != "qfmodel" || models[0].Name != "" {
+		t.Fatalf("missing-name model=%+v", models[0])
+	}
+	if models[1].ID != "qmodel_38max" || models[1].Name != "Qoder Max" {
+		t.Fatalf("named model=%+v", models[1])
+	}
+}

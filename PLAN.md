@@ -1,0 +1,116 @@
+# qoder-cpa 后续实施计划
+
+## 当前基线
+
+- 当前版本：`v0.1.21`（本地实施中，尚未发布）
+- 已完成：Device OAuth、Qoder Global COSY/Bearer transport、动态模型目录、Chat/Responses 执行器、WebUI 账号与传输配置、缺失 usage 时的估算 Token。
+- 当前边界：估算 Token 仅用于没有真实 usage 的响应，并标记 `estimated=true`；不伪造缓存 Token，不覆盖真实 usage。
+- 发布约束：使用 GitHub Actions 构建 Linux amd64/arm64；VPS 只部署 Release 产物，不在 VPS 编译。
+
+## 阶段 1：配额与账号状态
+
+目标版本：`v0.1.21`
+
+实施状态：代码已接入控制面和管理页，待完成最终门禁与发布验收。
+
+### 目标
+
+将 Qoder 账号的套餐、配额和限制状态接入 CPA WebUI，帮助用户判断账号是否可用；不把配额接口当作请求 Token 来源。
+
+### 实施范围
+
+- 核对 Orchids-2api 当前实现和 Qoder Global 实际接口，确认 quota、plan、status 的真实 URL、鉴权方式和响应结构。
+- 重做 `internal/qodercontrol/quota.go` 的响应模型和请求路径；配额、套餐和状态统一走 `openapi.qoder.sh` 的 Bearer 控制面，不复用 Chat 的 COSY 签名 transport。
+- 扩展账号状态模型，至少覆盖：套餐、剩余额度、额度上限、Agent limit、重置时间、是否耗尽、最后刷新时间和脱敏错误状态。
+- 模型展示名自动适配：保留目录返回的真实 `key/id` 作为调用 ID，优先使用 `name`、`display_name` 或 `displayName` 作为展示名；缺失时回退为内部模型 ID，禁止通过静态猜测改写调用 ID。
+- 扩展 management API 返回账号配额状态，并提供单账号刷新；失败不得删除或失效现有凭据。
+- 调整 `web/index.html`：在账号表展示状态摘要、配额、重置时间和刷新结果；模型相关区域同时显示友好名称与内部模型 ID，保持当前紧凑表格布局。
+
+### 不做
+
+- 不用配额数据填充 prompt/completion Token。
+- 不在插件内实现多账号轮转。
+- 不复制 CPA 的认证存储或刷新机制。
+
+### 验收
+
+- 使用本地假上游覆盖成功、字段缺失、额度耗尽、限流和接口失败。
+- COSY API2、COSY API3、Bearer profile 至少分别通过请求构造回归测试。
+- 模型目录覆盖新增模型、目录顺序变化、重复 ID、缺失展示名和 `qoder/<id>` 去重；不得因展示名变化改变调用 ID。
+- 管理接口不返回 access token、refresh token、COSY 签名材料或请求体。
+- WebUI 能区分“额度耗尽”“刷新失败”“未刷新”和“正常”。
+- `go test ./... -shuffle=on -count=1`、`go vet ./...`、内联 JavaScript 检查和 CI race 全部通过。
+
+## 阶段 2：Qoder 高级参数映射
+
+目标版本：`v0.1.22`
+
+### 目标
+
+补齐客户端请求到 Qoder 原生请求的高级参数映射，保持 OpenAI 兼容客户端和 Qoder 两条 transport 的行为一致。
+
+### 实施范围
+
+- 扩展 `internal/qodertransport/chat_request.go` 的输入模型，明确区分通用 OpenAI 字段和 Qoder 专用字段。
+- 核对并按真实上游行为映射：
+  - `reasoning_effort`
+  - `temperature`
+  - `max_tokens` / `max_completion_tokens`
+  - `tool_choice`
+  - `parallel_tool_calls`
+  - tools、tool calls 及其相关选项
+  - 已由 Qoder Global 实际接受的模型配置字段
+- 分别实现和测试 COSY、Bearer 两条 transport 的字段映射；不能仅在 OpenAI 兼容层保存字段而不发送。
+- 对不支持或冲突的参数采用明确策略：忽略、转换或返回结构化 `unsupported_parameter`，不得静默伪造成功语义。
+- 保留已有消息、工具、reasoning 和 stream 行为，不改变账号选择、认证和 WebUI 管理接口。
+
+### 验收
+
+- 每个支持参数都有请求 JSON 回归测试，断言实际出站字段。
+- COSY 与 Bearer 的差异有独立测试，避免一条 transport 的实现覆盖另一条。
+- 工具调用、reasoning 和普通文本三类请求分别覆盖流式与非流式路径。
+- 真实上游只做受控单请求验证，不重复发送不支持的参数。
+- 真实 usage、估算 usage 和缓存字段行为保持不变。
+
+## 阶段 3：流稳定性
+
+目标版本：`v0.1.23`
+
+### 目标
+
+让长连接 Agent 请求在上游异常、限流和不完整结束时返回可诊断、可重试的结果，避免静默成功或泛化错误。
+
+### 实施范围
+
+- EOF 时没有终止事件，返回明确的截断错误并保留已收到内容。
+- 识别 HTTP 200 响应中的内嵌限流/业务错误文本。
+- 解析并暴露 `agentLimitResetTime`，供错误摘要和账号状态使用。
+- 完善 HTTP 错误、SSE 错误和业务错误的 code/type/message 分类，同时保持敏感信息脱敏。
+- 为工具调用仅以文本形式返回的情况增加回退解析，避免丢失可执行工具意图。
+- 保持 CPA 宿主需要的裸 JSON chunk 约束，由宿主统一包装 SSE；不得再次引入 `data: data:` 双重包装。
+
+### 验收
+
+- 覆盖正常终止、EOF 截断、`response.failed`、HTTP 200 内嵌限流、业务错误和客户端取消。
+- 覆盖跨 chunk、CRLF、空事件、超大事件和末尾无空行等 SSE 边界。
+- Agent 客户端收到的每个流帧均符合 Chat Completions 联合类型：有效 `choices[]` 或有效 `error{}`。
+- 错误日志包含状态码、业务 code、类型、重置时间等脱敏诊断字段。
+- 使用受控真实请求验证一次流式正常响应和一次可复现错误，不进行压力测试。
+
+## 暂缓项
+
+- PAT 登录和 `jt-*` Job Token 交换：Device OAuth 已满足当前账号接入需求，除非出现明确使用场景。
+- 多账号按配额轮转：优先交给 CPA 宿主调度，插件只提供准确状态。
+- 后台 token 刷新：继续复用 CPA AuthProvider 的 refresh 链路，不新增重复任务。
+- 批量账号导入：当前收益低于配额和流稳定性。
+- 模型目录缓存：先展示刷新时间；只有真实刷新成本或上游限流成为问题时再加入缓存。
+
+## 发布顺序
+
+严格按小版本单主题发布：
+
+1. `v0.1.21`：配额与账号状态。
+2. `v0.1.22`：高级参数映射。
+3. `v0.1.23`：流稳定性。
+
+每个版本均遵循：本地红测 → 最小实现 → 全量测试/vet → CI race 与双架构构建 → Release 产物校验 → VPS 备份、原子替换、重启 CPA → 单次受控验证。
