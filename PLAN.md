@@ -2,7 +2,7 @@
 
 ## 当前基线
 
-- 当前版本：`v0.1.23`（高级参数映射，待发布）
+- 当前版本：`v0.1.23`（高级参数映射，已发布并部署）
 - 已完成：Device OAuth、Qoder Global COSY/Bearer transport、动态模型目录、Chat/Responses 执行器、WebUI 账号与传输配置、缺失 usage 时的估算 Token、配额控制面（v0.1.21）。
 - 已完成：模型目录驱动的动态公开 ID 映射；Qoder 上游返回的 `key/id` 与展示名生成客户端可见模型 ID，executor 按 `AuthID` 反向还原内部 key，不需要手动修改 CPA alias 配置（v0.1.22）。
 - 本轮实施：Chat Completions 高级参数映射；Bearer 与 COSY transport 分别接收已支持的参数，保留显式 `false/0`，不伪造 COSY 未确认的 `temperature` 字段。
@@ -74,7 +74,7 @@
 - 真实上游只做受控单请求验证，不重复发送不支持的参数。
 - 真实 usage、估算 usage 和缓存字段行为保持不变。
 
-实施状态：已完成，待发布验收。
+实施状态：已完成并在 v0.1.23 发布、部署。
 
 ## 阶段 3：流稳定性
 
