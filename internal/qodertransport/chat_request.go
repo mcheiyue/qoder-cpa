@@ -16,13 +16,16 @@ var errInvalidChatPayload = errors.New("qodertransport: invalid chat payload")
 type ModelResolver func(publicID string) string
 
 type chatPayload struct {
-	Model       string            `json:"model"`
-	PublicModel string            `json:"-"`
-	Messages    []chatMessageWire `json:"messages"`
-	Tools       []json.RawMessage `json:"tools"`
-	ToolChoice  json.RawMessage   `json:"tool_choice"`
-	Temperature *float64          `json:"temperature"`
-	MaxTokens   *int              `json:"max_tokens"`
+	Model               string            `json:"model"`
+	PublicModel         string            `json:"-"`
+	Messages            []chatMessageWire `json:"messages"`
+	Tools               []json.RawMessage `json:"tools"`
+	ToolChoice          json.RawMessage   `json:"tool_choice"`
+	Temperature         *float64          `json:"temperature"`
+	MaxTokens           *int              `json:"max_tokens"`
+	ReasoningEffort     *string           `json:"reasoning_effort"`
+	MaxCompletionTokens *int              `json:"max_completion_tokens"`
+	ParallelToolCalls   *bool             `json:"parallel_tool_calls"`
 }
 
 type chatMessageWire struct {
@@ -110,9 +113,12 @@ func toBearerRequest(payload chatPayload, req StreamRequest) (bearer.StreamReque
 		tools = append(tools, tool)
 	}
 	return bearer.StreamRequest{
-		Model: payload.Model, Messages: messages, Tools: tools, ToolChoice: payload.ToolChoice,
+		Model:               payload.Model, Messages: messages, Tools: tools, ToolChoice: payload.ToolChoice,
 		Temperature: payload.Temperature, MaxTokens: payload.MaxTokens,
-		RequestID: req.ID, SessionID: req.SessionID,
+		ReasoningEffort:     payload.ReasoningEffort,
+		MaxCompletionTokens: payload.MaxCompletionTokens,
+		ParallelToolCalls:   payload.ParallelToolCalls,
+		RequestID:           req.ID, SessionID: req.SessionID,
 	}, nil
 }
 
@@ -136,10 +142,36 @@ func toCosyRequest(payload chatPayload, req StreamRequest) (cosy.BuildRequestInp
 			ToolCalls: item.ToolCalls, ToolCallID: item.ToolCallID, Name: item.Name,
 		})
 	}
+	// Build COSY parameters: only allocate when at least one field is set.
+	// max_tokens priority: max_completion_tokens (if present) > max_tokens.
+	var params *cosy.Parameters
+	if payload.MaxCompletionTokens != nil || payload.MaxTokens != nil ||
+		derefString(payload.ReasoningEffort) != "" ||
+		len(payload.ToolChoice) > 0 ||
+		payload.ParallelToolCalls != nil {
+		p := cosy.Parameters{
+			ReasoningEffort:   derefString(payload.ReasoningEffort),
+			ToolChoice:        payload.ToolChoice,
+			ParallelToolCalls: payload.ParallelToolCalls,
+		}
+		if payload.MaxCompletionTokens != nil {
+			p.MaxTokens = payload.MaxCompletionTokens
+		} else {
+			p.MaxTokens = payload.MaxTokens
+		}
+		params = &p
+	}
 	return cosy.BuildRequestInput{
 		RequestID: req.ID, SessionID: req.SessionID, ModelKey: payload.Model,
 		ModelSource: "system", SystemPrompt: system.String(), Messages: messages,
-		Tools: payload.Tools, CosyVersion: defaultCosyVersion,
+		Tools: payload.Tools, Parameters: params, CosyVersion: defaultCosyVersion,
 		ModelConfig: cosy.ModelConfigIn{Key: payload.Model, Format: "openai", Source: "system"},
 	}, nil
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

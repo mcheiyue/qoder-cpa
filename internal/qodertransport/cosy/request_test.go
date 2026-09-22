@@ -183,3 +183,150 @@ func TestTruncateRunes(t *testing.T) {
 		t.Errorf("long string: got %q", got)
 	}
 }
+
+// --- Parameters regression tests ---
+
+func paramsInput(p Parameters) BuildRequestInput {
+	return BuildRequestInput{
+		RequestID: "r", Messages: []ChatMessageIn{{Role: "user", Content: "hi"}},
+		BeginAt: time.Unix(1700000000, 0), Parameters: &p,
+	}
+}
+
+func buildParamsRaw(t *testing.T, in BuildRequestInput) map[string]json.RawMessage {
+	t.Helper()
+	raw, err := BuildChatBody(in)
+	if err != nil {
+		t.Fatalf("BuildChatBody: %v", err)
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	return m
+}
+
+func TestParameters_MaxTokens(t *testing.T) {
+	v := 4096
+	m := buildParamsRaw(t, paramsInput(Parameters{MaxTokens: &v}))
+	if string(m["parameters"]) != `{"max_tokens":4096}` {
+		t.Errorf("parameters: got %s", m["parameters"])
+	}
+}
+
+func TestParameters_MaxTokensZero(t *testing.T) {
+	v := 0
+	m := buildParamsRaw(t, paramsInput(Parameters{MaxTokens: &v}))
+	if string(m["parameters"]) != `{"max_tokens":0}` {
+		t.Errorf("parameters: got %s", m["parameters"])
+	}
+}
+
+func TestParameters_ReasoningEffort(t *testing.T) {
+	m := buildParamsRaw(t, paramsInput(Parameters{ReasoningEffort: "high"}))
+	if string(m["parameters"]) != `{"reasoning_effort":"high"}` {
+		t.Errorf("parameters: got %s", m["parameters"])
+	}
+}
+
+func TestParameters_ToolChoiceString(t *testing.T) {
+	m := buildParamsRaw(t, paramsInput(Parameters{
+		ToolChoice: json.RawMessage(`"auto"`),
+	}))
+	if string(m["parameters"]) != `{"tool_choice":"auto"}` {
+		t.Errorf("parameters: got %s", m["parameters"])
+	}
+}
+
+func TestParameters_ToolChoiceObject(t *testing.T) {
+	raw := json.RawMessage(`{"type":"function","function":{"name":"get_weather"}}`)
+	m := buildParamsRaw(t, paramsInput(Parameters{ToolChoice: raw}))
+	want := `{"tool_choice":{"type":"function","function":{"name":"get_weather"}}}`
+	if string(m["parameters"]) != want {
+		t.Errorf("parameters: got %s, want %s", m["parameters"], want)
+	}
+}
+
+func TestParameters_ParallelToolCallsFalse(t *testing.T) {
+	v := false
+	m := buildParamsRaw(t, paramsInput(Parameters{ParallelToolCalls: &v}))
+	if string(m["parameters"]) != `{"parallel_tool_calls":false}` {
+		t.Errorf("parameters: got %s", m["parameters"])
+	}
+}
+
+func TestParameters_ParallelToolCallsTrue(t *testing.T) {
+	v := true
+	m := buildParamsRaw(t, paramsInput(Parameters{ParallelToolCalls: &v}))
+	if string(m["parameters"]) != `{"parallel_tool_calls":true}` {
+		t.Errorf("parameters: got %s", m["parameters"])
+	}
+}
+
+func TestParameters_AllFields(t *testing.T) {
+	maxTok := 2048
+	par := false
+	m := buildParamsRaw(t, paramsInput(Parameters{
+		MaxTokens:         &maxTok,
+		ReasoningEffort:   "low",
+		ToolChoice:        json.RawMessage(`"none"`),
+		ParallelToolCalls: &par,
+	}))
+	// Unmarshal to verify structure, exact field order doesn't matter.
+	var p map[string]json.RawMessage
+	if err := json.Unmarshal(m["parameters"], &p); err != nil {
+		t.Fatalf("unmarshal parameters: %v", err)
+	}
+	if string(p["max_tokens"]) != "2048" {
+		t.Errorf("max_tokens: got %s", p["max_tokens"])
+	}
+	if string(p["reasoning_effort"]) != `"low"` {
+		t.Errorf("reasoning_effort: got %s", p["reasoning_effort"])
+	}
+	if string(p["tool_choice"]) != `"none"` {
+		t.Errorf("tool_choice: got %s", p["tool_choice"])
+	}
+	if string(p["parallel_tool_calls"]) != "false" {
+		t.Errorf("parallel_tool_calls: got %s", p["parallel_tool_calls"])
+	}
+}
+
+func TestParameters_NilPreservesEmptyObject(t *testing.T) {
+	m := buildParamsRaw(t, BuildRequestInput{
+		RequestID: "r", Messages: []ChatMessageIn{{Role: "user", Content: "hi"}},
+		BeginAt: time.Unix(1700000000, 0),
+		// Parameters deliberately nil
+	})
+	if string(m["parameters"]) != "{}" {
+		t.Errorf("parameters with nil: got %s, want {}", m["parameters"])
+	}
+}
+
+func TestParameters_EmptyStructOmitsAll(t *testing.T) {
+	m := buildParamsRaw(t, paramsInput(Parameters{}))
+	if string(m["parameters"]) != "{}" {
+		t.Errorf("parameters with empty struct: got %s, want {}", m["parameters"])
+	}
+}
+
+func TestBuildChatBody_ParametersNilBackwardCompat(t *testing.T) {
+	// Verify the full body JSON matches existing format when Parameters is nil.
+	raw, err := BuildChatBody(BuildRequestInput{
+		RequestID: "req-1", SessionID: "sess-1", ModelKey: "lite",
+		Messages:    []ChatMessageIn{{Role: "user", Content: "hi"}},
+		CosyVersion: "1.1.34", BeginAt: time.Unix(1700000000, 0),
+	})
+	if err != nil {
+		t.Fatalf("BuildChatBody: %v", err)
+	}
+	var body chatBody
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if string(body.Parameters) != "{}" {
+		t.Errorf("parameters backward compat: got %s, want {}", body.Parameters)
+	}
+	if body.RequestID != "req-1" {
+		t.Errorf("request_id: got %q", body.RequestID)
+	}
+}

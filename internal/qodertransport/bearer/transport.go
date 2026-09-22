@@ -77,14 +77,17 @@ func NewTransport(cfg Config) (*Transport, error) {
 
 // StreamRequest is the input for a streaming chat request.
 type StreamRequest struct {
-	Model       string
-	Messages    []Message
-	Tools       []Tool
-	ToolChoice  json.RawMessage // string or structured tool_choice at the wire boundary
-	Temperature *float64
-	MaxTokens   *int
-	RequestID   string
-	SessionID   string
+	Model               string
+	Messages            []Message
+	Tools               []Tool
+	ToolChoice          json.RawMessage // string or structured tool_choice at the wire boundary
+	Temperature         *float64
+	MaxTokens           *int
+	ReasoningEffort     *string
+	MaxCompletionTokens *int
+	ParallelToolCalls   *bool
+	RequestID           string
+	SessionID           string
 }
 
 // StreamResponse holds the SSE parser for a streaming response.
@@ -213,6 +216,15 @@ func buildRequestBody(req StreamRequest) ([]byte, error) {
 	}
 	if req.MaxTokens != nil {
 		body.MaxTokens = req.MaxTokens
+	}
+	if req.ReasoningEffort != nil {
+		body.ReasoningEffort = req.ReasoningEffort
+	}
+	if req.MaxCompletionTokens != nil {
+		body.MaxCompletionTokens = req.MaxCompletionTokens
+	}
+	if req.ParallelToolCalls != nil {
+		body.ParallelToolCalls = req.ParallelToolCalls
 	}
 	if req.RequestID != "" || req.SessionID != "" {
 		body.Metadata = requestMetadata{

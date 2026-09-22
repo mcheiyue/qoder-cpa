@@ -211,3 +211,164 @@ func TestStream_ToolChoiceForwarded(t *testing.T) {
 		t.Errorf("tool_choice: got %q, want auto", body.ToolChoice)
 	}
 }
+
+func TestStream_ReasoningEffortForwarded(t *testing.T) {
+	var bodyBytes []byte
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer ts.Close()
+	tr := newTestTransport(t, ts)
+	_, err := tr.Stream(context.Background(), StreamRequest{
+		Model:           "qoder-1",
+		Messages:        []Message{{Role: "user", Content: "hi"}},
+		ReasoningEffort: ptrString("high"),
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	var body struct {
+		ReasoningEffort string `json:"reasoning_effort"`
+	}
+	if err := json.Unmarshal(bodyBytes, &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if body.ReasoningEffort != "high" {
+		t.Errorf("reasoning_effort: got %q, want high", body.ReasoningEffort)
+	}
+}
+
+func TestStream_MaxCompletionTokensForwarded(t *testing.T) {
+	var bodyBytes []byte
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer ts.Close()
+	tr := newTestTransport(t, ts)
+	_, err := tr.Stream(context.Background(), StreamRequest{
+		Model:               "qoder-1",
+		Messages:            []Message{{Role: "user", Content: "hi"}},
+		MaxCompletionTokens: ptrInt(4096),
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	var body struct {
+		MaxCompletionTokens int `json:"max_completion_tokens"`
+	}
+	if err := json.Unmarshal(bodyBytes, &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if body.MaxCompletionTokens != 4096 {
+		t.Errorf("max_completion_tokens: got %d, want 4096", body.MaxCompletionTokens)
+	}
+}
+
+func TestStream_ParallelToolCallsFalseForwarded(t *testing.T) {
+	var bodyBytes []byte
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer ts.Close()
+	tr := newTestTransport(t, ts)
+	_, err := tr.Stream(context.Background(), StreamRequest{
+		Model:             "qoder-1",
+		Messages:          []Message{{Role: "user", Content: "hi"}},
+		ParallelToolCalls: ptrBool(false),
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(bodyBytes, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	v, ok := raw["parallel_tool_calls"]
+	if !ok {
+		t.Fatal("parallel_tool_calls: key missing from wire body")
+	}
+	if string(v) != "false" {
+		t.Errorf("parallel_tool_calls: got %s, want false", v)
+	}
+}
+
+func TestStream_AdvancedFieldsOmittedWhenNil(t *testing.T) {
+	var bodyBytes []byte
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer ts.Close()
+	tr := newTestTransport(t, ts)
+	_, err := tr.Stream(context.Background(), StreamRequest{
+		Model:    "qoder-1",
+		Messages: []Message{{Role: "user", Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(bodyBytes, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, key := range []string{"reasoning_effort", "max_completion_tokens", "parallel_tool_calls"} {
+		if _, ok := raw[key]; ok {
+			t.Errorf("%s: should be omitted when nil, but present in wire body", key)
+		}
+	}
+}
+
+func TestStream_AllAdvancedFieldsTogether(t *testing.T) {
+	var bodyBytes []byte
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer ts.Close()
+	tr := newTestTransport(t, ts)
+	_, err := tr.Stream(context.Background(), StreamRequest{
+		Model:               "qoder-1",
+		Messages:            []Message{{Role: "user", Content: "hi"}},
+		Temperature:         ptrFloat64(0.5),
+		MaxTokens:           ptrInt(2048),
+		ReasoningEffort:     ptrString("medium"),
+		MaxCompletionTokens: ptrInt(8192),
+		ParallelToolCalls:   ptrBool(true),
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	var body struct {
+		Temperature         float64 `json:"temperature"`
+		MaxTokens           int     `json:"max_tokens"`
+		ReasoningEffort     string  `json:"reasoning_effort"`
+		MaxCompletionTokens int     `json:"max_completion_tokens"`
+		ParallelToolCalls   bool    `json:"parallel_tool_calls"`
+	}
+	if err := json.Unmarshal(bodyBytes, &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if body.Temperature != 0.5 {
+		t.Errorf("temperature: got %f, want 0.5", body.Temperature)
+	}
+	if body.MaxTokens != 2048 {
+		t.Errorf("max_tokens: got %d, want 2048", body.MaxTokens)
+	}
+	if body.ReasoningEffort != "medium" {
+		t.Errorf("reasoning_effort: got %q, want medium", body.ReasoningEffort)
+	}
+	if body.MaxCompletionTokens != 8192 {
+		t.Errorf("max_completion_tokens: got %d, want 8192", body.MaxCompletionTokens)
+	}
+	if !body.ParallelToolCalls {
+		t.Error("parallel_tool_calls: got false, want true")
+	}
+}

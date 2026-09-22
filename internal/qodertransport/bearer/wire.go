@@ -5,15 +5,18 @@ import "encoding/json"
 // --- Request wire format ---
 
 type requestBody struct {
-	Model         string          `json:"model"`
-	Messages      []Message       `json:"messages"`
-	Tools         []Tool          `json:"tools,omitempty"`
-	ToolChoice    json.RawMessage `json:"tool_choice,omitempty"`
-	Temperature   *float64        `json:"temperature,omitempty"`
-	MaxTokens     *int            `json:"max_tokens,omitempty"`
-	Stream        bool            `json:"stream"`
-	StreamOptions streamOptions   `json:"stream_options"`
-	Metadata      requestMetadata `json:"metadata,omitempty"`
+	Model               string          `json:"model"`
+	Messages            []Message       `json:"messages"`
+	Tools               []Tool          `json:"tools,omitempty"`
+	ToolChoice          json.RawMessage `json:"tool_choice,omitempty"`
+	Temperature         *float64        `json:"temperature,omitempty"`
+	MaxTokens           *int            `json:"max_tokens,omitempty"`
+	ReasoningEffort     *string         `json:"reasoning_effort,omitempty"`
+	MaxCompletionTokens *int            `json:"max_completion_tokens,omitempty"`
+	ParallelToolCalls   *bool           `json:"parallel_tool_calls,omitempty"`
+	Stream              bool            `json:"stream"`
+	StreamOptions       streamOptions   `json:"stream_options"`
+	Metadata            requestMetadata `json:"metadata,omitempty"`
 }
 
 type streamOptions struct {

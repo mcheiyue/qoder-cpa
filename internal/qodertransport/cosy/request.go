@@ -19,6 +19,17 @@ var (
 	ErrIncompleteRuntimeFields = errors.New("cosy: runtime fields incomplete")
 )
 
+// Parameters carries optional LLM generation parameters for the COSY request.
+// Nil pointer fields are omitted from JSON; explicit zero/false values are sent.
+// ToolChoice uses json.RawMessage because the upstream accepts both a plain
+// string ("auto", "none") and a structured object ({ "type":"function", ... }).
+type Parameters struct {
+	MaxTokens         *int            `json:"max_tokens,omitempty"`
+	ReasoningEffort   string          `json:"reasoning_effort,omitempty"`
+	ToolChoice        json.RawMessage `json:"tool_choice,omitempty"`
+	ParallelToolCalls *bool           `json:"parallel_tool_calls,omitempty"`
+}
+
 // BuildRequestInput is the caller-supplied request parameters.
 type BuildRequestInput struct {
 	RequestID    string
@@ -28,6 +39,7 @@ type BuildRequestInput struct {
 	SystemPrompt string
 	Messages     []ChatMessageIn
 	Tools        []json.RawMessage
+	Parameters   *Parameters
 	ModelConfig  ModelConfigIn
 	CosyVersion  string
 	BeginAt      time.Time
@@ -113,6 +125,14 @@ func BuildChatBody(in BuildRequestInput) ([]byte, error) {
 		source = "system"
 	}
 	beginAt := in.BeginAt.UnixMilli()
+	var paramsRaw json.RawMessage = json.RawMessage("{}")
+	if in.Parameters != nil {
+		serialized, err := json.Marshal(in.Parameters)
+		if err != nil {
+			return nil, fmt.Errorf("cosy: marshal parameters: %w", err)
+		}
+		paramsRaw = serialized
+	}
 	body := chatBody{
 		RequestID:    in.RequestID,
 		RequestSetID: in.RequestID,
@@ -131,7 +151,7 @@ func BuildChatBody(in BuildRequestInput) ([]byte, error) {
 		System:       in.SystemPrompt,
 		Messages:     msgs,
 		Tools:        in.Tools,
-		Parameters:   json.RawMessage("{}"),
+		Parameters:   paramsRaw,
 		ModelConfig: modelConfigWire{
 			Key:            in.ModelKey,
 			Format:         format,

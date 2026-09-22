@@ -214,3 +214,5 @@ func newTestTransport(t *testing.T, ts *httptest.Server) *Transport {
 
 func ptrFloat64(v float64) *float64 { return &v }
 func ptrInt(v int) *int             { return &v }
+func ptrString(v string) *string    { return &v }
+func ptrBool(v bool) *bool          { return &v }
