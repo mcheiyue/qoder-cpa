@@ -2,7 +2,7 @@
 
 ## 当前基线
 
-- 当前版本：`v0.1.24`（流稳定性，已发布并部署）
+- 当前版本：`v0.1.25`（COSY 原生 Thinking/Context 语义，已发布并部署）
 - 已完成：Device OAuth、Qoder Global COSY/Bearer transport、动态模型目录、Chat/Responses 执行器、WebUI 账号与传输配置、缺失 usage 时的估算 Token、配额控制面（v0.1.21）。
 - 已完成：模型目录驱动的动态公开 ID 映射；Qoder 上游返回的 `key/id` 与展示名生成客户端可见模型 ID，executor 按 `AuthID` 反向还原内部 key，不需要手动修改 CPA alias 配置（v0.1.22）。
 - 本轮实施：Chat Completions 高级参数映射；Bearer 与 COSY transport 分别接收已支持的参数，保留显式 `false/0`，不伪造 COSY 未确认的 `temperature` 字段。
@@ -104,7 +104,7 @@
 
 ## 阶段 4：COSY 原生 Thinking/Context 语义
 
-目标版本：`v0.1.25`（发布候选）
+目标版本：`v0.1.25`（已发布）
 
 ### 目标
 
@@ -120,17 +120,18 @@
 
 ### 本地实施状态
 
-本地已完成。目录解析、CPA 模型元数据、per-AuthID 原子快照和 COSY 请求语义均有回归测试；排除依赖真实 API2 的不稳定 `TestTransport_TamperedBody` 后，确定性全量测试 shuffle×3、`go vet ./...`、`gofmt` 和差异检查通过。该外部测试单独复跑时偶发 5 秒上下文取消，未用重试或延时掩盖。CGO/`-race` 需要 gcc，当前环境不可用，留待 CI。
+本地已完成。目录解析、CPA 模型元数据、per-AuthID 原子快照和 COSY 请求语义均有回归测试；排除依赖真实 API2 的不稳定 `TestTransport_TamperedBody` 后，确定性全量测试 shuffle×3、`go vet ./...`、`gofmt` 和差异检查通过。该外部测试单独复跑时偶发 5 秒上下文取消，未用重试或延时掩盖。GitHub Actions 的普通测试、race、vet、amd64/arm64 构建和 Release 已全绿；本机 `-race` 因无 gcc 未运行。
 
 ### 并发审计
 
 `modelRegistry` 使用 `sync.RWMutex` 保护每个 AuthID 的目录快照；公开 ID、内部 ID 与模型元数据在同一次加锁中整体替换，resolver 在一次 RLock 内读取同一条记录。未发现 refresh、配额或流执行路径的其他共享状态竞态，无需新增锁。
 
-### 待办
+### 发布与现网验收
 
-- CI race 验证（本机无 gcc）
-- Release 产物构建与部署
-- 现网受控单请求验证
+- CI：普通测试、`CGO_ENABLED=1 go test -race ./...`、vet、amd64/arm64 构建和 Release 全绿。
+- Release：`qoder-v0.1.25.tar.gz` 已发布，SHA256 `527356C83C4F5E011A627B18B6AED26B3E68F9CBC026CC971B591F70C294D710`。
+- VPS：已备份旧插件并原子替换，CPA 注册 `version=0.1.25`，回滚备份 `/opt/_backup-qoder-v0.1.25_20260923_235512.so`。
+- 受控请求：`qoder/Qwen3.8-Flash` 非流式返回 HTTP 200、`chat.completion`，usage 为 `prompt=23`、`completion=117`、`estimated=true`；日志确认使用已保存 OAuth 账号。
 
 ## 暂缓项
 
@@ -152,6 +153,6 @@
 
 阶段 3 实施状态：已在 v0.1.24 发布、部署，并完成现网受控流式验收。
 
-阶段 4 实施状态：本地完成（TDD、go vet、gofmt 通过；-race 待 CI），正在构建 Release 并部署。
+阶段 4 实施状态：已发布并在 v0.1.25 部署；CI race、双架构构建、Release、VPS 注册和现网受控请求均完成。
 
 每个版本均遵循：本地红测 → 最小实现 → 全量测试/vet → CI race 与双架构构建 → Release 产物校验 → VPS 备份、原子替换、重启 CPA → 单次受控验证。
