@@ -12,8 +12,15 @@ import (
 
 var errInvalidChatPayload = errors.New("qodertransport: invalid chat payload")
 
-// ModelResolver translates a client-facing Qoder model ID to its upstream key.
-type ModelResolver func(publicID string) string
+// ResolvedModel carries the internal model ID and catalog metadata for a resolved public model.
+type ResolvedModel struct {
+	InternalID     string
+	IsReasoning    bool
+	MaxInputTokens int
+}
+
+// ModelResolver translates a client-facing Qoder model ID to its upstream key and metadata.
+type ModelResolver func(publicID string) ResolvedModel
 
 type chatPayload struct {
 	Model               string            `json:"model"`
@@ -26,6 +33,8 @@ type chatPayload struct {
 	ReasoningEffort     *string           `json:"reasoning_effort"`
 	MaxCompletionTokens *int              `json:"max_completion_tokens"`
 	ParallelToolCalls   *bool             `json:"parallel_tool_calls"`
+	IsReasoning         bool              `json:"-"`
+	MaxInputTokens      int               `json:"-"`
 }
 
 type chatMessageWire struct {
@@ -52,9 +61,12 @@ func parseChatPayload(raw []byte, resolve ModelResolver) (chatPayload, error) {
 	}
 	payload.Model = strings.TrimPrefix(payload.PublicModel, qoderauth.Provider+"/")
 	if resolve != nil {
-		if internalID := strings.TrimSpace(resolve(payload.PublicModel)); internalID != "" {
+		resolved := resolve(payload.PublicModel)
+		if internalID := strings.TrimSpace(resolved.InternalID); internalID != "" {
 			payload.Model = internalID
 		}
+		payload.IsReasoning = resolved.IsReasoning
+		payload.MaxInputTokens = resolved.MaxInputTokens
 	}
 	if payload.Model == "" || len(payload.Messages) == 0 {
 		return chatPayload{}, errInvalidChatPayload
@@ -113,7 +125,7 @@ func toBearerRequest(payload chatPayload, req StreamRequest) (bearer.StreamReque
 		tools = append(tools, tool)
 	}
 	return bearer.StreamRequest{
-		Model:               payload.Model, Messages: messages, Tools: tools, ToolChoice: payload.ToolChoice,
+		Model: payload.Model, Messages: messages, Tools: tools, ToolChoice: payload.ToolChoice,
 		Temperature: payload.Temperature, MaxTokens: payload.MaxTokens,
 		ReasoningEffort:     payload.ReasoningEffort,
 		MaxCompletionTokens: payload.MaxCompletionTokens,
@@ -145,12 +157,16 @@ func toCosyRequest(payload chatPayload, req StreamRequest) (cosy.BuildRequestInp
 	// Build COSY parameters: only allocate when at least one field is set.
 	// max_tokens priority: max_completion_tokens (if present) > max_tokens.
 	var params *cosy.Parameters
+	effort := strings.ToLower(strings.TrimSpace(derefString(payload.ReasoningEffort)))
+	enableThinking := payload.IsReasoning && effort != "none"
+	contextLength := payload.MaxInputTokens
 	if payload.MaxCompletionTokens != nil || payload.MaxTokens != nil ||
-		derefString(payload.ReasoningEffort) != "" ||
+		effort != "" ||
 		len(payload.ToolChoice) > 0 ||
-		payload.ParallelToolCalls != nil {
+		payload.ParallelToolCalls != nil ||
+		enableThinking ||
+		contextLength > 0 {
 		p := cosy.Parameters{
-			ReasoningEffort:   derefString(payload.ReasoningEffort),
 			ToolChoice:        payload.ToolChoice,
 			ParallelToolCalls: payload.ParallelToolCalls,
 		}
@@ -159,13 +175,27 @@ func toCosyRequest(payload chatPayload, req StreamRequest) (cosy.BuildRequestInp
 		} else {
 			p.MaxTokens = payload.MaxTokens
 		}
+		// COSY reasoning semantics: "none" disables thinking; other effort strings are forwarded.
+		if payload.IsReasoning || effort == "none" {
+			v := enableThinking
+			p.EnableThinking = &v
+		}
+		if effort != "" && effort != "none" {
+			p.ReasoningEffort = effort
+		}
+		if contextLength > 0 {
+			p.ContextLength = &contextLength
+		}
 		params = &p
 	}
 	return cosy.BuildRequestInput{
 		RequestID: req.ID, SessionID: req.SessionID, ModelKey: payload.Model,
 		ModelSource: "system", SystemPrompt: system.String(), Messages: messages,
 		Tools: payload.Tools, Parameters: params, CosyVersion: defaultCosyVersion,
-		ModelConfig: cosy.ModelConfigIn{Key: payload.Model, Format: "openai", Source: "system"},
+		ModelConfig: cosy.ModelConfigIn{
+			Key: payload.Model, Format: "openai", Source: "system",
+			IsReasoning: payload.IsReasoning, MaxInputTokens: payload.MaxInputTokens,
+		},
 	}, nil
 }
 

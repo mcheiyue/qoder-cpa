@@ -43,11 +43,11 @@ func TestParseChatPayload_InvalidJSON(t *testing.T) {
 
 func TestParseChatPayload_WithResolver(t *testing.T) {
 	raw := minimalJSON("")
-	resolver := ModelResolver(func(publicID string) string {
+	resolver := ModelResolver(func(publicID string) ResolvedModel {
 		if publicID == "qoder/gpt-4" {
-			return "internal-gpt4"
+			return ResolvedModel{InternalID: "internal-gpt4"}
 		}
-		return ""
+		return ResolvedModel{}
 	})
 	p, err := parseChatPayload(raw, resolver)
 	if err != nil {
@@ -60,7 +60,7 @@ func TestParseChatPayload_WithResolver(t *testing.T) {
 
 func TestParseChatPayload_ResolverReturnsEmpty(t *testing.T) {
 	raw := minimalJSON("")
-	resolver := ModelResolver(func(publicID string) string { return "" })
+	resolver := ModelResolver(func(publicID string) ResolvedModel { return ResolvedModel{} })
 	p, err := parseChatPayload(raw, resolver)
 	if err != nil {
 		t.Fatalf("parseChatPayload: %v", err)
@@ -160,8 +160,8 @@ func TestParseChatPayload_AlreadyPrefixed(t *testing.T) {
 
 func TestParseChatPayload_ModelWithResolverOverride(t *testing.T) {
 	raw := []byte(`{"model":"gpt-4","messages":[{"role":"user","content":"hi"}]}`)
-	resolver := ModelResolver(func(publicID string) string {
-		return "upstream-v2/gpt-4-turbo"
+	resolver := ModelResolver(func(publicID string) ResolvedModel {
+		return ResolvedModel{InternalID: "upstream-v2/gpt-4-turbo"}
 	})
 	p, err := parseChatPayload(raw, resolver)
 	if err != nil {

@@ -49,6 +49,7 @@ func (s authService) models(ctx context.Context, raw []byte) (pluginapi.ModelRes
 		authID = string(qoderauth.AuthIDForUser(cred.UserID))
 	}
 	mapping := make(map[string]string, len(upstream))
+	meta := make(map[string]ModelMeta, len(upstream))
 	seenInternal := make(map[string]struct{}, len(upstream))
 	models := make([]pluginapi.ModelInfo, 0, len(upstream))
 	for _, model := range upstream {
@@ -66,13 +67,21 @@ func (s authService) models(ctx context.Context, raw []byte) (pluginapi.ModelRes
 			continue
 		}
 		mapping[publicID] = internalID
-		models = append(models, pluginapi.ModelInfo{
+		meta[publicID] = ModelMeta{IsReasoning: model.IsReasoning, MaxInputTokens: model.MaxInputTokens}
+		info := pluginapi.ModelInfo{
 			ID: publicID, Object: "model", OwnedBy: qoderauth.Provider,
 			Name: internalID, DisplayName: name,
 			SupportedGenerationMethods: []string{"chat-completions"},
-		})
+		}
+		if model.MaxInputTokens > 0 {
+			info.InputTokenLimit = int64(model.MaxInputTokens)
+		}
+		if model.IsReasoning {
+			info.Thinking = &pluginapi.ThinkingSupport{ZeroAllowed: true}
+		}
+		models = append(models, info)
 	}
-	defaultModelRegistry.store(authID, mapping)
+	defaultModelRegistry.storeCatalog(authID, mapping, meta)
 	return pluginapi.ModelResponse{Provider: qoderauth.Provider, Models: models}, nil
 }
 

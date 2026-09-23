@@ -53,6 +53,86 @@ func TestModelProviderABIUsesDynamicCatalog(t *testing.T) {
 	}
 }
 
+func TestModelProviderCatalogMetadataSetsInputTokenLimitAndThinking(t *testing.T) {
+	previousCall := hostJSONCall
+	previousService := defaultAuthService
+	t.Cleanup(func() { hostJSONCall, defaultAuthService = previousCall, previousService })
+	defaultAuthService.controlConfig = qodercontrol.Config{BaseURL: "https://qoder.test", AllowedHosts: []string{"qoder.test"}}
+	hostJSONCall = func(_ string, _ any) (json.RawMessage, error) {
+		return json.Marshal(pluginapi.HTTPResponse{
+			StatusCode: http.StatusOK,
+			Body:       []byte(`{"data":[{"key":"r1","name":"R1-Reasoning","is_reasoning":true,"max_input_tokens":131072},{"key":"p1","name":"P1-Plain"}]}`),
+		})
+	}
+	data := modelTestAuth(t)
+	raw, _ := json.Marshal(rpcAuthModelRequest{
+		AuthModelRequest: pluginapi.AuthModelRequest{AuthProvider: "qoder", StorageJSON: data.StorageJSON},
+		HostCallbackID:   "cb-meta",
+	})
+	envelope, err := handleMethod(pluginabi.MethodModelForAuth, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := decodeResult[pluginapi.ModelResponse](t, envelope)
+	if len(result.Models) != 2 {
+		t.Fatalf("models=%#v", result.Models)
+	}
+	var reasoning, plain pluginapi.ModelInfo
+	for _, m := range result.Models {
+		if m.ID == "qoder/R1-Reasoning" {
+			reasoning = m
+		} else {
+			plain = m
+		}
+	}
+	if reasoning.InputTokenLimit != 131072 {
+		t.Errorf("reasoning InputTokenLimit=%d, want 131072", reasoning.InputTokenLimit)
+	}
+	if reasoning.Thinking == nil || !reasoning.Thinking.ZeroAllowed {
+		t.Errorf("reasoning Thinking=%+v, want ZeroAllowed=true", reasoning.Thinking)
+	}
+	if plain.InputTokenLimit != 0 {
+		t.Errorf("plain InputTokenLimit=%d, want 0", plain.InputTokenLimit)
+	}
+	if plain.Thinking != nil {
+		t.Errorf("plain Thinking=%+v, want nil", plain.Thinking)
+	}
+}
+
+func TestModelProviderCatalogMetadataStoredPerAuthID(t *testing.T) {
+	previousCall := hostJSONCall
+	previousService := defaultAuthService
+	t.Cleanup(func() { hostJSONCall, defaultAuthService = previousCall, previousService })
+	defaultAuthService.controlConfig = qodercontrol.Config{BaseURL: "https://qoder.test", AllowedHosts: []string{"qoder.test"}}
+	hostJSONCall = func(_ string, _ any) (json.RawMessage, error) {
+		return json.Marshal(pluginapi.HTTPResponse{
+			StatusCode: http.StatusOK,
+			Body:       []byte(`{"data":[{"key":"r1","name":"R1-Reasoning","is_reasoning":true,"max_input_tokens":64000}]}`),
+		})
+	}
+	data := modelTestAuth(t)
+	authID := "auth-meta-check"
+	raw, _ := json.Marshal(rpcAuthModelRequest{
+		AuthModelRequest: pluginapi.AuthModelRequest{AuthID: authID, AuthProvider: "qoder", StorageJSON: data.StorageJSON},
+		HostCallbackID:   "cb-meta2",
+	})
+	_, err := handleMethod(pluginabi.MethodModelForAuth, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicID := "qoder/R1-Reasoning"
+	if got := defaultModelRegistry.resolve(authID, publicID); got != "r1" {
+		t.Fatalf("internal ID=%q, want r1", got)
+	}
+	meta, ok := defaultModelRegistry.resolveMeta(authID, publicID)
+	if !ok {
+		t.Fatal("metadata not stored")
+	}
+	if !meta.IsReasoning || meta.MaxInputTokens != 64000 {
+		t.Fatalf("metadata=%+v", meta)
+	}
+}
+
 func TestModelProviderUsesUpstreamDisplayNameAndRegistersReverseMapping(t *testing.T) {
 	previousCall := hostJSONCall
 	previousService := defaultAuthService

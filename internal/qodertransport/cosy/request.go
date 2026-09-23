@@ -28,6 +28,8 @@ type Parameters struct {
 	ReasoningEffort   string          `json:"reasoning_effort,omitempty"`
 	ToolChoice        json.RawMessage `json:"tool_choice,omitempty"`
 	ParallelToolCalls *bool           `json:"parallel_tool_calls,omitempty"`
+	EnableThinking    *bool           `json:"enable_thinking,omitempty"`
+	ContextLength     *int            `json:"context_length,omitempty"`
 }
 
 // BuildRequestInput is the caller-supplied request parameters.

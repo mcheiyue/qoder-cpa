@@ -17,8 +17,10 @@ import (
 
 // Model describes a model in the Qoder catalog.
 type Model struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	IsReasoning    bool   `json:"is_reasoning"`
+	MaxInputTokens int    `json:"max_input_tokens"`
 }
 
 func (m *Model) UnmarshalJSON(raw []byte) error {
@@ -28,12 +30,16 @@ func (m *Model) UnmarshalJSON(raw []byte) error {
 		Name             string `json:"name"`
 		DisplayName      string `json:"display_name"`
 		DisplayNameCamel string `json:"displayName"`
+		IsReasoning      bool   `json:"is_reasoning"`
+		MaxInputTokens   int    `json:"max_input_tokens"`
 	}
 	if err := json.Unmarshal(raw, &wire); err != nil {
 		return err
 	}
 	m.ID = firstString(wire.ID, wire.Key)
 	m.Name = modelDisplayName(m.ID, wire.DisplayName, wire.DisplayNameCamel, wire.Name)
+	m.IsReasoning = wire.IsReasoning
+	m.MaxInputTokens = wire.MaxInputTokens
 	return nil
 }
 
@@ -145,7 +151,12 @@ func collectModels(value any) []Model {
 			if id != "" {
 				if _, ok := seen[id]; !ok {
 					seen[id] = struct{}{}
-					models = append(models, Model{ID: id, Name: modelDisplayName(id, stringValue(typed["display_name"]), stringValue(typed["displayName"]), stringValue(typed["name"]))})
+					models = append(models, Model{
+						ID:             id,
+						Name:           modelDisplayName(id, stringValue(typed["display_name"]), stringValue(typed["displayName"]), stringValue(typed["name"])),
+						IsReasoning:    boolValue(typed["is_reasoning"]),
+						MaxInputTokens: intValue(typed["max_input_tokens"]),
+					})
 				}
 			}
 			for _, child := range typed {
@@ -180,4 +191,22 @@ func firstString(values ...any) string {
 		}
 	}
 	return ""
+}
+
+func boolValue(value any) bool {
+	b, _ := value.(bool)
+	return b
+}
+
+func intValue(value any) int {
+	switch v := value.(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	case json.Number:
+		n, _ := v.Int64()
+		return int(n)
+	}
+	return 0
 }

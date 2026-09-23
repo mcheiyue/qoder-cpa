@@ -154,3 +154,44 @@ func TestParseCatalogPrefersDisplayNameOverInternalName(t *testing.T) {
 		t.Fatalf("models=%+v", models)
 	}
 }
+
+func TestParseCatalogPreservesReasoningMetadata(t *testing.T) {
+	models, err := parseCatalog([]byte(`{"data":[{"key":"reason-model","name":"Reason Model","is_reasoning":true,"max_input_tokens":131072},{"key":"plain-model","name":"Plain Model","is_reasoning":false}]}`))
+	if err != nil {
+		t.Fatalf("parseCatalog: %v", err)
+	}
+	if len(models) != 2 {
+		t.Fatalf("models=%+v, want 2", models)
+	}
+	reason := models[0]
+	if reason.ID != "reason-model" || !reason.IsReasoning || reason.MaxInputTokens != 131072 {
+		t.Errorf("reasoning model: %+v", reason)
+	}
+	plain := models[1]
+	if plain.ID != "plain-model" || plain.IsReasoning || plain.MaxInputTokens != 0 {
+		t.Errorf("plain model: %+v", plain)
+	}
+}
+
+func TestParseCatalogNestedReasoningMetadata(t *testing.T) {
+	models, err := parseCatalog([]byte(`{"data":{"chat":[{"key":"r1","name":"R1","is_reasoning":true,"max_input_tokens":64000}]}}`))
+	if err != nil {
+		t.Fatalf("parseCatalog: %v", err)
+	}
+	if len(models) != 1 || !models[0].IsReasoning || models[0].MaxInputTokens != 64000 {
+		t.Fatalf("models=%+v", models)
+	}
+}
+
+func TestParseCatalogMissingMetadataDefaultsFalse(t *testing.T) {
+	models, err := parseCatalog([]byte(`{"data":[{"key":"no-meta","name":"No Meta"}]}`))
+	if err != nil {
+		t.Fatalf("parseCatalog: %v", err)
+	}
+	if len(models) != 1 {
+		t.Fatalf("models=%+v", models)
+	}
+	if models[0].IsReasoning || models[0].MaxInputTokens != 0 {
+		t.Errorf("missing metadata should default to false/0: %+v", models[0])
+	}
+}

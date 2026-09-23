@@ -156,11 +156,11 @@ func TestChatPayloadPreservesToolsAndTextParts(t *testing.T) {
 
 func TestChatPayloadResolvesDynamicPublicModelAndPreservesResponseID(t *testing.T) {
 	raw := []byte(`{"model":"qoder/Qwen3.8-Flash","messages":[{"role":"user","content":"hi"}]}`)
-	payload, err := parseChatPayload(raw, func(publicID string) string {
+	payload, err := parseChatPayload(raw, func(publicID string) ResolvedModel {
 		if publicID == "qoder/Qwen3.8-Flash" {
-			return "qfmodel"
+			return ResolvedModel{InternalID: "qfmodel"}
 		}
-		return ""
+		return ResolvedModel{}
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -172,7 +172,7 @@ func TestChatPayloadResolvesDynamicPublicModelAndPreservesResponseID(t *testing.
 
 func TestChatPayloadUnknownModelPassesThrough(t *testing.T) {
 	raw := []byte(`{"model":"qoder/new-model","messages":[{"role":"user","content":"hi"}]}`)
-	payload, err := parseChatPayload(raw, func(string) string { return "" })
+	payload, err := parseChatPayload(raw, func(string) ResolvedModel { return ResolvedModel{} })
 	if err != nil {
 		t.Fatal(err)
 	}

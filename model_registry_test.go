@@ -51,3 +51,70 @@ func TestModelRegistryConcurrentAccess(t *testing.T) {
 	}
 	wait.Wait()
 }
+
+func TestModelRegistryStoresMetadataPerAccount(t *testing.T) {
+	registry := newModelRegistry()
+	registry.storeCatalog(
+		"auth-a",
+		map[string]string{"qoder/r1": "reason-model"},
+		map[string]ModelMeta{"qoder/r1": {IsReasoning: true, MaxInputTokens: 131072}},
+	)
+	registry.store("auth-b", map[string]string{"qoder/r1": "reason-model"})
+	// auth-b has no metadata stored.
+
+	meta, ok := registry.resolveMeta("auth-a", "qoder/r1")
+	if !ok || !meta.IsReasoning || meta.MaxInputTokens != 131072 {
+		t.Fatalf("auth-a metadata: %+v ok=%v", meta, ok)
+	}
+	meta, ok = registry.resolveMeta("auth-b", "qoder/r1")
+	if ok {
+		t.Fatalf("auth-b should have no metadata, got %+v", meta)
+	}
+}
+
+func TestModelRegistryResolveMetaCopiesSnapshot(t *testing.T) {
+	registry := newModelRegistry()
+	original := map[string]ModelMeta{"qoder/m": {IsReasoning: true, MaxInputTokens: 100}}
+	registry.storeCatalog("auth", map[string]string{"qoder/m": "m"}, original)
+	// Mutate original after store — snapshot should be independent.
+	original["qoder/m"] = ModelMeta{IsReasoning: false, MaxInputTokens: 999}
+	meta, ok := registry.resolveMeta("auth", "qoder/m")
+	if !ok || !meta.IsReasoning || meta.MaxInputTokens != 100 {
+		t.Fatalf("snapshot was mutated: %+v", meta)
+	}
+}
+
+func TestModelRegistryStoreReplacesMetadata(t *testing.T) {
+	registry := newModelRegistry()
+	registry.storeCatalog("auth", map[string]string{"qoder/m": "m"}, map[string]ModelMeta{"qoder/m": {IsReasoning: true}})
+	registry.storeCatalog("auth", map[string]string{"qoder/m": "m"}, map[string]ModelMeta{"qoder/m": {IsReasoning: false}})
+	meta, ok := registry.resolveMeta("auth", "qoder/m")
+	if !ok || meta.IsReasoning {
+		t.Fatalf("stale metadata: %+v", meta)
+	}
+}
+
+func TestModelRegistryConcurrentStoreAndResolve(t *testing.T) {
+	registry := newModelRegistry()
+	var wg sync.WaitGroup
+	const n = 8
+	wg.Add(n * 2)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			defer wg.Done()
+			authID := "auth-" + string(rune('a'+i))
+			registry.storeCatalog(
+				authID,
+				map[string]string{"qoder/m": "m"},
+				map[string]ModelMeta{"qoder/m": {IsReasoning: i%2 == 0, MaxInputTokens: i * 1000}},
+			)
+		}(i)
+		go func(i int) {
+			defer wg.Done()
+			authID := "auth-" + string(rune('a'+i))
+			registry.resolve(authID, "qoder/m")
+			registry.resolveMeta(authID, "qoder/m")
+		}(i)
+	}
+	wg.Wait()
+}

@@ -2,12 +2,12 @@
 
 ## 当前基线
 
-- 当前版本：`v0.1.24`（流稳定性，待发布）
+- 当前版本：`v0.1.24`（流稳定性，已发布并部署）
 - 已完成：Device OAuth、Qoder Global COSY/Bearer transport、动态模型目录、Chat/Responses 执行器、WebUI 账号与传输配置、缺失 usage 时的估算 Token、配额控制面（v0.1.21）。
 - 已完成：模型目录驱动的动态公开 ID 映射；Qoder 上游返回的 `key/id` 与展示名生成客户端可见模型 ID，executor 按 `AuthID` 反向还原内部 key，不需要手动修改 CPA alias 配置（v0.1.22）。
 - 本轮实施：Chat Completions 高级参数映射；Bearer 与 COSY transport 分别接收已支持的参数，保留显式 `false/0`，不伪造 COSY 未确认的 `temperature` 字段。
 - 当前边界：估算 Token 仅用于没有真实 usage 的响应，并标记 `estimated=true`；不伪造缓存 Token，不覆盖真实 usage。
-- 流稳定性已在本地收口：已有 EOF 截断错误保持不变；新增 HTTP 200 业务错误/限流识别、请求级 `agentLimitResetTime` 脱敏摘要和 `Tool calls: [...]` 跨 chunk 回退。
+- 流稳定性已发布并完成现网受控流式验证：已有 EOF 截断错误保持不变；新增 HTTP 200 业务错误/限流识别、请求级 `agentLimitResetTime` 脱敏摘要和 `Tool calls: [...]` 跨 chunk 回退。
 - 发布约束：使用 GitHub Actions 构建 Linux amd64/arm64；VPS 只部署 Release 产物，不在 VPS 编译。
 
 ## 阶段 1：配额与账号状态
@@ -102,6 +102,36 @@
 - 错误日志包含状态码、业务 code、类型、重置时间等脱敏诊断字段。
 - 使用受控真实请求验证一次流式正常响应和一次可复现错误，不进行压力测试。
 
+## 阶段 4：COSY 原生 Thinking/Context 语义
+
+目标版本：`v0.1.25`（发布候选）
+
+### 目标
+
+将 Qoder 目录模型的 `is_reasoning` 和 `max_input_tokens` 元数据贯穿到 COSY 出站请求的 `model_config` 和 `parameters` 层，支持推理模型原生 thinking toggle 和 context length 声明；不伪造不存在的 effort 级别。
+
+### 实施范围
+
+- 目录解析保留 `is_reasoning`、`max_input_tokens`，per-AuthID 原子替换。
+- 公开 ID 映射与 `ModelMeta` 组成同一份 per-AuthID 目录快照，`ModelResolver` 返回 `ResolvedModel{InternalID, IsReasoning, MaxInputTokens}`。
+- `ModelInfo` 暴露 `InputTokenLimit`；推理模型设置 `ThinkingSupport{ZeroAllowed: true}`，不声称命名 effort 级别。
+- COSY 出站：`model_config` 传递 `is_reasoning`/`max_input_tokens`；`parameters` 添加 `enable_thinking`（推理模型默认 true）、`context_length`（>0 时发送）；`reasoning_effort=none` 映射为 `enable_thinking=false` 且不发送 `reasoning_effort`；其他 effort 级别正常转发。
+- Bearer transport 不变，无 COSY-only 字段泄漏。
+
+### 本地实施状态
+
+本地已完成。目录解析、CPA 模型元数据、per-AuthID 原子快照和 COSY 请求语义均有回归测试；排除依赖真实 API2 的不稳定 `TestTransport_TamperedBody` 后，确定性全量测试 shuffle×3、`go vet ./...`、`gofmt` 和差异检查通过。该外部测试单独复跑时偶发 5 秒上下文取消，未用重试或延时掩盖。CGO/`-race` 需要 gcc，当前环境不可用，留待 CI。
+
+### 并发审计
+
+`modelRegistry` 使用 `sync.RWMutex` 保护每个 AuthID 的目录快照；公开 ID、内部 ID 与模型元数据在同一次加锁中整体替换，resolver 在一次 RLock 内读取同一条记录。未发现 refresh、配额或流执行路径的其他共享状态竞态，无需新增锁。
+
+### 待办
+
+- CI race 验证（本机无 gcc）
+- Release 产物构建与部署
+- 现网受控单请求验证
+
 ## 暂缓项
 
 - PAT 登录和 `jt-*` Job Token 交换：Device OAuth 已满足当前账号接入需求，除非出现明确使用场景。
@@ -118,7 +148,10 @@
 2. `v0.1.22`：动态模型公开 ID 映射。
 3. `v0.1.23`：高级参数映射。
 4. `v0.1.24`：流稳定性。
+5. `v0.1.25`：COSY 原生 Thinking/Context 语义（发布候选）。
 
-阶段 3 实施状态：本地完成，待 CI race、Release 产物和一次现网受控流式验收。
+阶段 3 实施状态：已在 v0.1.24 发布、部署，并完成现网受控流式验收。
+
+阶段 4 实施状态：本地完成（TDD、go vet、gofmt 通过；-race 待 CI），正在构建 Release 并部署。
 
 每个版本均遵循：本地红测 → 最小实现 → 全量测试/vet → CI race 与双架构构建 → Release 产物校验 → VPS 备份、原子替换、重启 CPA → 单次受控验证。

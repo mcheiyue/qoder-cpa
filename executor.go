@@ -63,7 +63,12 @@ func (s executorService) open(ctx context.Context, req rpcExecutorRequest) (qode
 	if authID == "" {
 		authID = string(qoderauth.AuthIDForUser(cred.UserID))
 	}
-	resolve := func(publicID string) string { return registry.resolve(authID, publicID) }
+	resolve := func(publicID string) qodertransport.ResolvedModel {
+		internalID, meta := registry.resolveModel(authID, publicID)
+		return qodertransport.ResolvedModel{
+			InternalID: internalID, IsReasoning: meta.IsReasoning, MaxInputTokens: meta.MaxInputTokens,
+		}
+	}
 	selector, err := s.selectorFactory(client, cred, resolve)
 	if err != nil {
 		return nil, err
