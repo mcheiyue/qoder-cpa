@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/mcheiyue/qoder-cpa/internal/qodertransport"
 	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/bearer"
 	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/cosy"
 )
@@ -23,6 +24,15 @@ func classifyExecutorError(err error) *executorFailure {
 	var failure *executorFailure
 	if errors.As(err, &failure) {
 		return failure
+	}
+	var streamBiz *qodertransport.StreamBusinessError
+	if errors.As(err, &streamBiz) {
+		return &executorFailure{
+			code:    streamBiz.Category,
+			message: streamBiz.Error(),
+			status:  502, // opaque upstream; do not expose or mutate quota
+			cause:   err,
+		}
 	}
 	var bearerHTTP *bearer.HTTPError
 	if errors.As(err, &bearerHTTP) {

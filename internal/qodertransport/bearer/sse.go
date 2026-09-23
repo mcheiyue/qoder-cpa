@@ -111,6 +111,10 @@ func classifyEvent(payload string) SSEEvent {
 		return SSEEvent{Type: SSETerminal}
 	}
 
+	if ev, ok := classifyError(payload); ok {
+		return ev
+	}
+
 	// Usage-only block (no choices, just usage)
 	if ev, ok := classifyUsage(payload); ok {
 		return ev
@@ -169,6 +173,15 @@ func classifyChoices(raw string) SSEEvent {
 			return ev
 		}
 		if d.Content != nil && *d.Content != "" {
+			// Check for rate-limit phrase before emitting
+			if isRateLimitText(*d.Content) {
+				ev.Type = SSEError
+				ev.StreamError = &StreamError{
+					Code:    429,
+					Message: "rate_limited",
+				}
+				return ev
+			}
 			ev.Type = SSETextDelta
 			ev.TextDelta = &TextDelta{Content: *d.Content}
 			return ev

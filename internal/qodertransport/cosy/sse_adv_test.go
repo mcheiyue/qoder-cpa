@@ -80,38 +80,6 @@ func TestSSEParser_ToolNameAndArgsTogether(t *testing.T) {
 	}
 }
 
-func TestSSEParser_BusinessErrorCodeString(t *testing.T) {
-	input := "data: {\"code\":\"403\",\"message\":\"access denied\"}\n\n"
-	parser := NewSSEParser(strings.NewReader(input))
-	evt, err := parser.Parse()
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if evt.Type != SSEError {
-		t.Fatalf("type: %d", evt.Type)
-	}
-	if evt.StreamError == nil {
-		t.Fatal("StreamError nil")
-	}
-	if evt.StreamError.Code != 403 {
-		t.Errorf("code: %d", evt.StreamError.Code)
-	}
-	if evt.StreamError.Message != "access_denied" {
-		t.Errorf("message: %q", evt.StreamError.Message)
-	}
-}
-
-func TestSSEParser_SignatureErrorCategory(t *testing.T) {
-	parser := NewSSEParser(strings.NewReader("data: {\"code\":101,\"message\":\"signature invalid\"}\n\n"))
-	event, err := parser.Parse()
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if event.StreamError == nil || event.StreamError.Message != "signature_invalid" {
-		t.Fatalf("event=%+v, want signature_invalid", event)
-	}
-}
-
 // --- helpers ---
 
 type chunkReader struct {

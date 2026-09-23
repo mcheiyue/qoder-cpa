@@ -2,16 +2,17 @@ package cosy
 
 import (
 	"encoding/json"
-	"strings"
+	"time"
 )
-
-// --- wire envelope (old protocol wraps payload in {"body":"..."}) ---
 
 type wireEnvelope struct {
 	Body string `json:"body"`
 }
 
-// --- OpenAI-style streaming wire format ---
+type wireStatusEnvelope struct {
+	StatusCodeValue int    `json:"statusCodeValue"`
+	Body            string `json:"body"`
+}
 
 type wireChoices struct {
 	Choices []wireChoice `json:"choices"`
@@ -40,8 +41,6 @@ type wireFunction struct {
 	Arguments string `json:"arguments"`
 }
 
-// --- usage block ---
-
 type wireUsage struct {
 	Usage wireUsageDetail `json:"usage"`
 }
@@ -55,60 +54,83 @@ type wireUsageDetail struct {
 	} `json:"completion_tokens_details"`
 }
 
-// --- business error ---
-
 type wireError struct {
 	Code    json.Number `json:"code"`
 	Message string      `json:"message"`
 }
 
-// safeErrorCategory maps error messages to a safe subset.
-// If the message is not in the map, we return a generic category.
-func safeErrorCategory(msg string) string {
-	lower := strings.ToLower(strings.ReplaceAll(msg, " ", "_"))
-	safe := []string{"access_denied", "rate_limited", "upstream_error", "queue_full", "timeout", "invalid_request", "context_length_exceeded", "signature_invalid"}
-	for _, cat := range safe {
-		if strings.Contains(lower, cat) {
-			return cat
+// unwrapBody recursively strips {"body":"..."} envelopes up to depth 3.
+func unwrapBody(raw string) string {
+	current := raw
+	for range 3 {
+		var env wireEnvelope
+		if err := json.Unmarshal([]byte(current), &env); err == nil && env.Body != "" {
+			current = env.Body
+		} else {
+			break
 		}
 	}
-	return "upstream_error"
+	return current
 }
 
-// unwrapBody strips the old {"body":"..."} envelope if present,
-// returning the inner JSON string.
-func unwrapBody(raw string) string {
-	var env wireEnvelope
-	if err := json.Unmarshal([]byte(raw), &env); err == nil && env.Body != "" {
-		return env.Body
+func extractStatusCodeValue(raw string) int {
+	var env wireStatusEnvelope
+	if err := json.Unmarshal([]byte(raw), &env); err == nil && env.StatusCodeValue != 0 {
+		return env.StatusCodeValue
 	}
-	return raw
+	return 0
 }
 
-// classifyEvent parses the unwrapped JSON payload and returns a typed SSEEvent.
+// extractAgentLimitResetTime searches for agentLimitResetTime (epoch millis)
+// in a JSON string that may itself be JSON-in-string, up to depth 3.
+func extractAgentLimitResetTime(raw string) time.Time {
+	current := raw
+	for range 3 {
+		var wrapper struct {
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal([]byte(current), &wrapper); err != nil || wrapper.Message == "" {
+			break
+		}
+		if t := parseResetTime(wrapper.Message); !t.IsZero() {
+			return t
+		}
+		current = wrapper.Message
+	}
+	if t := parseResetTime(raw); !t.IsZero() {
+		return t
+	}
+	return time.Time{}
+}
+
 func classifyEvent(payload string) SSEEvent {
+	statusCode := extractStatusCodeValue(payload)
 	payload = unwrapBody(payload)
 
-	// [DONE] terminal
 	if isTerminal(payload) {
 		return SSEEvent{Type: SSETerminal}
 	}
 
-	// Try business error first
 	if ev, ok := classifyError(payload); ok {
+		ev.StreamError.ResetAt = extractAgentLimitResetTime(payload)
 		return ev
 	}
 
-	// Usage-only block
+	if statusCode != 0 && statusCode != 200 {
+		resetAt := extractAgentLimitResetTime(payload)
+		return SSEEvent{
+			Type:        SSEError,
+			StreamError: &StreamError{Code: statusCode, Message: statusCategory(statusCode), ResetAt: resetAt},
+		}
+	}
+
 	if ev, ok := classifyUsage(payload); ok {
 		return ev
 	}
 
-	// OpenAI-style choices
 	return classifyChoices(payload)
 }
 
-// classifyError checks for {"code":...,"message":"..."} error payloads.
 func classifyError(raw string) (SSEEvent, bool) {
 	var we wireError
 	if err := json.Unmarshal([]byte(raw), &we); err != nil || we.Code == "" {
@@ -127,7 +149,6 @@ func classifyError(raw string) (SSEEvent, bool) {
 	}, true
 }
 
-// classifyUsage checks for {"usage":{...}} payloads.
 func classifyUsage(raw string) (SSEEvent, bool) {
 	var wu wireUsage
 	if err := json.Unmarshal([]byte(raw), &wu); err != nil {
@@ -147,36 +168,34 @@ func classifyUsage(raw string) (SSEEvent, bool) {
 	}, true
 }
 
-// classifyChoices handles {"choices":[{"delta":{...}}]}.
 func classifyChoices(raw string) SSEEvent {
 	var wc wireChoices
 	if err := json.Unmarshal([]byte(raw), &wc); err != nil {
 		return SSEEvent{Type: SSEError, StreamError: &StreamError{Message: "invalid JSON"}}
 	}
 	for _, ch := range wc.Choices {
-		// finish_reason present → terminal
 		if ch.FinishReason != nil {
 			return SSEEvent{Type: SSETerminal}
 		}
 		d := ch.Delta
-		// reasoning
 		if d.ReasoningContent != nil && *d.ReasoningContent != "" {
 			return SSEEvent{Type: SSEReasoningDelta, ReasoningDelta: &ReasoningDelta{Content: *d.ReasoningContent}}
 		}
-		// text
 		if d.Content != nil && *d.Content != "" {
+			if isRateLimitText(*d.Content) {
+				return SSEEvent{
+					Type:        SSEError,
+					StreamError: &StreamError{Code: 429, Message: "rate_limited"},
+				}
+			}
 			return SSEEvent{Type: SSETextDelta, TextDelta: &TextDelta{Content: *d.Content}}
 		}
-		// tool calls
 		if len(d.ToolCalls) > 0 {
 			t := d.ToolCalls[0]
 			return SSEEvent{
 				Type: SSEToolDelta,
 				ToolDelta: &ToolDelta{
-					Index:     t.Index,
-					ID:        t.ID,
-					Name:      t.Function.Name,
-					Arguments: t.Function.Arguments,
+					Index: t.Index, ID: t.ID, Name: t.Function.Name, Arguments: t.Function.Arguments,
 				},
 			}
 		}

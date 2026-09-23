@@ -1,6 +1,9 @@
 package bearer
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 // SSEEventType enumerates event types.
 type SSEEventType int
@@ -54,8 +57,9 @@ type ToolDelta struct {
 
 // StreamError carries a typed error with a safe category.
 type StreamError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Code    int       `json:"code"`
+	Message string    `json:"message"`
+	ResetAt time.Time `json:"-"` // populated from agentLimitResetTime when present
 }
 
 // Sentinel errors returned by the parser.

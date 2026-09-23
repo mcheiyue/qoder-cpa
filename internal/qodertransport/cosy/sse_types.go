@@ -1,6 +1,9 @@
 package cosy
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 // SSEEventKind enumerates event types.
 type SSEEventType int
@@ -55,8 +58,9 @@ type Usage struct {
 
 // StreamError carries a typed error with a safe category.
 type StreamError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Code    int       `json:"code"`
+	Message string    `json:"message"`
+	ResetAt time.Time `json:"-"` // populated from agentLimitResetTime when present
 }
 
 // Sentinel errors returned by the parser.

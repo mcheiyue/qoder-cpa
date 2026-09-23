@@ -67,10 +67,10 @@ func (a *cosyAdapter) StreamChat(ctx context.Context, req StreamRequest) (Stream
 	if err != nil {
 		return nil, err
 	}
-	return &cosyHandle{
+	return newTextToolFallback(&cosyHandle{
 		response:    response,
 		handleState: handleState{id: completionID(req.ID), model: payload.PublicModel},
-	}, nil
+	}, len(payload.Tools) > 0, completionID(req.ID), payload.PublicModel), nil
 }
 
 type bearerAdapter struct {
@@ -91,10 +91,10 @@ func (a *bearerAdapter) StreamChat(ctx context.Context, req StreamRequest) (Stre
 	if err != nil {
 		return nil, err
 	}
-	return &bearerHandle{
+	return newTextToolFallback(&bearerHandle{
 		response:    response,
 		handleState: handleState{id: completionID(req.ID), model: payload.PublicModel},
-	}, nil
+	}, len(payload.Tools) > 0, completionID(req.ID), payload.PublicModel), nil
 }
 
 func completionID(requestID string) string {

@@ -2,11 +2,12 @@
 
 ## 当前基线
 
-- 当前版本：`v0.1.23`（高级参数映射，已发布并部署）
+- 当前版本：`v0.1.24`（流稳定性，待发布）
 - 已完成：Device OAuth、Qoder Global COSY/Bearer transport、动态模型目录、Chat/Responses 执行器、WebUI 账号与传输配置、缺失 usage 时的估算 Token、配额控制面（v0.1.21）。
 - 已完成：模型目录驱动的动态公开 ID 映射；Qoder 上游返回的 `key/id` 与展示名生成客户端可见模型 ID，executor 按 `AuthID` 反向还原内部 key，不需要手动修改 CPA alias 配置（v0.1.22）。
 - 本轮实施：Chat Completions 高级参数映射；Bearer 与 COSY transport 分别接收已支持的参数，保留显式 `false/0`，不伪造 COSY 未确认的 `temperature` 字段。
 - 当前边界：估算 Token 仅用于没有真实 usage 的响应，并标记 `estimated=true`；不伪造缓存 Token，不覆盖真实 usage。
+- 流稳定性已在本地收口：已有 EOF 截断错误保持不变；新增 HTTP 200 业务错误/限流识别、请求级 `agentLimitResetTime` 脱敏摘要和 `Tool calls: [...]` 跨 chunk 回退。
 - 发布约束：使用 GitHub Actions 构建 Linux amd64/arm64；VPS 只部署 Release 产物，不在 VPS 编译。
 
 ## 阶段 1：配额与账号状态
@@ -117,5 +118,7 @@
 2. `v0.1.22`：动态模型公开 ID 映射。
 3. `v0.1.23`：高级参数映射。
 4. `v0.1.24`：流稳定性。
+
+阶段 3 实施状态：本地完成，待 CI race、Release 产物和一次现网受控流式验收。
 
 每个版本均遵循：本地红测 → 最小实现 → 全量测试/vet → CI race 与双架构构建 → Release 产物校验 → VPS 备份、原子替换、重启 CPA → 单次受控验证。

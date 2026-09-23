@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/bearer"
 	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/cosy"
 )
 
@@ -29,6 +31,106 @@ func TestCosyEventSequenceProducesCompleteChatSSE(t *testing.T) {
 	done, ok := state.nextTerminal()
 	if !ok || string(done) != "data: [DONE]\n\n" {
 		t.Fatalf("done=%q ok=%v", done, ok)
+	}
+}
+
+func TestCosyEventChunk_BusinessError_PropagatesTyped(t *testing.T) {
+	state := handleState{id: "chatcmpl-1", model: "qoder/model-a"}
+	_, emit, err := cosyEventChunk(state.id, state.model, cosy.SSEEvent{
+		Type: cosy.SSEError,
+		StreamError: &cosy.StreamError{
+			Code:    10605,
+			Message: "queue_full",
+		},
+	}, &state)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if emit {
+		t.Error("expected emit=false for error")
+	}
+	var sb *StreamBusinessError
+	if !asStreamBusinessError(err, &sb) {
+		t.Fatalf("expected *StreamBusinessError, got %T: %v", err, err)
+	}
+	if sb.Code != 10605 {
+		t.Errorf("code: got %d, want 10605", sb.Code)
+	}
+	if sb.Category != "queue_full" {
+		t.Errorf("category: got %q, want %q", sb.Category, "queue_full")
+	}
+}
+
+func TestCosyEventChunk_BusinessError_WithResetAt(t *testing.T) {
+	state := handleState{id: "chatcmpl-1", model: "qoder/model-a"}
+	resetAt := time.UnixMilli(1727000000000)
+	_, _, err := cosyEventChunk(state.id, state.model, cosy.SSEEvent{
+		Type: cosy.SSEError,
+		StreamError: &cosy.StreamError{
+			Code:    429,
+			Message: "rate_limited",
+			ResetAt: resetAt,
+		},
+	}, &state)
+	var sb *StreamBusinessError
+	if !asStreamBusinessError(err, &sb) {
+		t.Fatalf("expected *StreamBusinessError, got %T: %v", err, err)
+	}
+	if sb.Code != 429 {
+		t.Errorf("code: %d", sb.Code)
+	}
+	if sb.Category != "rate_limited" {
+		t.Errorf("category: %q", sb.Category)
+	}
+	if sb.ResetAt.IsZero() || sb.ResetAt.UnixMilli() != 1727000000000 {
+		t.Errorf("resetAt: got %v, want epoch 1727000000000", sb.ResetAt)
+	}
+}
+
+func TestBearerEventChunk_BusinessError_PropagatesTyped(t *testing.T) {
+	state := handleState{id: "chatcmpl-1", model: "qoder/model-a"}
+	_, emit, err := bearerEventChunk(state.id, state.model, bearer.SSEEvent{
+		Type: bearer.SSEError,
+		StreamError: &bearer.StreamError{
+			Code:    112,
+			Message: "access_denied",
+		},
+	}, &state)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if emit {
+		t.Error("expected emit=false for error")
+	}
+	var sb *StreamBusinessError
+	if !asStreamBusinessError(err, &sb) {
+		t.Fatalf("expected *StreamBusinessError, got %T: %v", err, err)
+	}
+	if sb.Code != 112 {
+		t.Errorf("code: got %d, want 112", sb.Code)
+	}
+	if sb.Category != "access_denied" {
+		t.Errorf("category: got %q, want %q", sb.Category, "access_denied")
+	}
+}
+
+func TestBearerEventChunk_BusinessError_WithResetAt(t *testing.T) {
+	state := handleState{id: "chatcmpl-1", model: "qoder/model-a"}
+	resetAt := time.UnixMilli(1727000000000)
+	_, _, err := bearerEventChunk(state.id, state.model, bearer.SSEEvent{
+		Type: bearer.SSEError,
+		StreamError: &bearer.StreamError{
+			Code:    429,
+			Message: "rate_limited",
+			ResetAt: resetAt,
+		},
+	}, &state)
+	var sb *StreamBusinessError
+	if !asStreamBusinessError(err, &sb) {
+		t.Fatalf("expected *StreamBusinessError, got %T: %v", err, err)
+	}
+	if sb.ResetAt.IsZero() || sb.ResetAt.UnixMilli() != 1727000000000 {
+		t.Errorf("resetAt: got %v, want epoch 1727000000000", sb.ResetAt)
 	}
 }
 
@@ -77,4 +179,16 @@ func TestChatPayloadUnknownModelPassesThrough(t *testing.T) {
 	if payload.Model != "new-model" || payload.PublicModel != "qoder/new-model" {
 		t.Fatalf("payload=%+v", payload)
 	}
+}
+
+// asStreamBusinessError extracts *StreamBusinessError from an error.
+func asStreamBusinessError(err error, target **StreamBusinessError) bool {
+	if err == nil {
+		return false
+	}
+	if e, ok := err.(*StreamBusinessError); ok {
+		*target = e
+		return true
+	}
+	return false
 }

@@ -141,27 +141,6 @@ func TestSSEParser_BodyWrapper(t *testing.T) {
 	}
 }
 
-func TestSSEParser_BusinessError(t *testing.T) {
-	input := "data: {\"code\":10605,\"message\":\"queue full\"}\n\n"
-	parser := NewSSEParser(strings.NewReader(input))
-	evt, err := parser.Parse()
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if evt.Type != SSEError {
-		t.Errorf("type: got %d, want %d", evt.Type, SSEError)
-	}
-	if evt.StreamError == nil {
-		t.Fatal("StreamError is nil")
-	}
-	if evt.StreamError.Code != 10605 {
-		t.Errorf("code: got %d, want 10605", evt.StreamError.Code)
-	}
-	if evt.StreamError.Message != "queue_full" {
-		t.Errorf("message: got %q, want %q", evt.StreamError.Message, "queue_full")
-	}
-}
-
 func TestSSEParser_CrossChunk(t *testing.T) {
 	r := &chunkReader{
 		chunks: []string{
