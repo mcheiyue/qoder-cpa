@@ -29,7 +29,8 @@ func classifyError(raw string) (SSEEvent, bool) {
 	if err != nil {
 		return SSEEvent{}, false
 	}
+	cat, q := qoderstream.ClassifyBusiness(int(code), we.Message, raw)
 	return SSEEvent{Type: SSEError, StreamError: &StreamError{
-		Code: int(code), Message: safeErrorCategory(we.Message),
+		Code: int(code), Message: cat, Queue: q,
 	}}, true
 }

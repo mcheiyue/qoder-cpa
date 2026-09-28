@@ -30,7 +30,7 @@ func cosyEventChunk(id, model string, event cosy.SSEEvent, state *handleState) (
 		if event.Usage == nil {
 			return nil, false, nil
 		}
-		return usageChunk(id, model, event.Usage.PromptTokens, event.Usage.CompletionTokens, event.Usage.TotalTokens, event.Usage.ReasoningTokens)
+		return usageChunk(id, model, event.Usage.PromptTokens, event.Usage.CompletionTokens, event.Usage.TotalTokens, event.Usage.ReasoningTokens, event.Usage.CachedTokens)
 	case cosy.SSETerminal:
 		chunk, err := state.finishChunk()
 		return chunk, true, err
@@ -39,9 +39,11 @@ func cosyEventChunk(id, model string, event cosy.SSEEvent, state *handleState) (
 			return nil, false, errUnknownStream
 		}
 		return nil, false, &StreamBusinessError{
-			Code:     event.StreamError.Code,
-			Category: event.StreamError.Message,
-			ResetAt:  event.StreamError.ResetAt,
+			Code:      event.StreamError.Code,
+			Category:  event.StreamError.Message,
+			ResetAt:   event.StreamError.ResetAt,
+			OuterCode: event.StreamError.OuterCode,
+			Queue:     event.StreamError.Queue,
 		}
 	default:
 		return nil, false, nil
@@ -73,7 +75,7 @@ func bearerEventChunk(id, model string, event bearer.SSEEvent, state *handleStat
 		if event.Usage == nil {
 			return nil, false, nil
 		}
-		return usageChunk(id, model, event.Usage.PromptTokens, event.Usage.CompletionTokens, event.Usage.TotalTokens, event.Usage.ReasoningTokens)
+		return usageChunk(id, model, event.Usage.PromptTokens, event.Usage.CompletionTokens, event.Usage.TotalTokens, event.Usage.ReasoningTokens, event.Usage.CachedTokens)
 	case bearer.SSETerminal:
 		chunk, err := state.finishChunk()
 		return chunk, true, err
@@ -82,9 +84,11 @@ func bearerEventChunk(id, model string, event bearer.SSEEvent, state *handleStat
 			return nil, false, errUnknownStream
 		}
 		return nil, false, &StreamBusinessError{
-			Code:     event.StreamError.Code,
-			Category: event.StreamError.Message,
-			ResetAt:  event.StreamError.ResetAt,
+			Code:      event.StreamError.Code,
+			Category:  event.StreamError.Message,
+			ResetAt:   event.StreamError.ResetAt,
+			OuterCode: event.StreamError.OuterCode,
+			Queue:     event.StreamError.Queue,
 		}
 	default:
 		return nil, false, nil
@@ -99,9 +103,10 @@ func deltaChunk(id, model string, delta chatDelta) ([]byte, bool, error) {
 	return chunk, true, err
 }
 
-func usageChunk(id, model string, prompt, completion, total, reasoning int) ([]byte, bool, error) {
+func usageChunk(id, model string, prompt, completion, total, reasoning, cached int) ([]byte, bool, error) {
 	usage := &chatUsage{PromptTokens: prompt, CompletionTokens: completion, TotalTokens: total}
 	usage.CompletionTokensDetails.ReasoningTokens = reasoning
+	usage.PromptTokensDetails.CachedTokens = cached
 	chunk, err := marshalSSE(chatChunk{ID: id, Object: "chat.completion.chunk", Model: model, Choices: []chatChoice{}, Usage: usage})
 	return chunk, true, err
 }

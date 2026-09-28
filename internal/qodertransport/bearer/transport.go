@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/qoderstream"
 )
 
 const (
@@ -163,10 +165,11 @@ func (t *Transport) Stream(ctx context.Context, req StreamRequest) (*StreamRespo
 		streamCancel()
 		body, readErr := readAndClose(resp.Body)
 		return nil, &HTTPError{
-			StatusCode: resp.StatusCode,
-			category:   classifyHTTPStatus(resp.StatusCode),
-			detail:     summarizeErrorBody(body),
-			readErr:    readErr,
+			StatusCode:    resp.StatusCode,
+			category:      classifyHTTPStatus(resp.StatusCode),
+			detail:        summarizeErrorBody(body),
+			readErr:       readErr,
+			RetryAfterSec: qoderstream.ParseRetryAfter(resp.Header.Get("Retry-After"), time.Now()),
 		}
 	}
 	ct := resp.Header.Get("Content-Type")

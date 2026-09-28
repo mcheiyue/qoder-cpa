@@ -20,10 +20,11 @@ const (
 // HTTPError represents a non-2xx HTTP response.
 // Body is kept internal for classification only; never exposed to callers.
 type HTTPError struct {
-	StatusCode int
-	category   SecurityCategory
-	detail     string
-	readErr    error
+	StatusCode    int
+	RetryAfterSec int // parsed Retry-After header (delta-seconds or HTTP-date), 0 when absent
+	category      SecurityCategory
+	detail        string
+	readErr       error
 }
 
 func (e *HTTPError) Error() string {

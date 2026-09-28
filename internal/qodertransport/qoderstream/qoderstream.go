@@ -24,6 +24,8 @@ func SafeErrorCategory(msg string) string {
 // StatusCategory maps a non-200 statusCodeValue to a safe error category.
 func StatusCategory(code int) string {
 	switch {
+	case code == 400 || code == 422:
+		return "invalid_request"
 	case code == 401 || code == 403:
 		return "access_denied"
 	case code == 429:

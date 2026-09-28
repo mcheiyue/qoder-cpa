@@ -3,6 +3,8 @@ package cosy
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/qoderstream"
 )
 
 type wireEnvelope struct {
@@ -46,9 +48,12 @@ type wireUsage struct {
 }
 
 type wireUsageDetail struct {
-	PromptTokens            int `json:"prompt_tokens"`
-	CompletionTokens        int `json:"completion_tokens"`
-	TotalTokens             int `json:"total_tokens"`
+	PromptTokens        int `json:"prompt_tokens"`
+	CompletionTokens    int `json:"completion_tokens"`
+	TotalTokens         int `json:"total_tokens"`
+	PromptTokensDetails struct {
+		CachedTokens int `json:"cached_tokens"`
+	} `json:"prompt_tokens_details"`
 	CompletionTokensDetails struct {
 		ReasoningTokens int `json:"reasoning_tokens"`
 	} `json:"completion_tokens_details"`
@@ -111,16 +116,17 @@ func classifyEvent(payload string) SSEEvent {
 		return SSEEvent{Type: SSETerminal}
 	}
 
-	if ev, ok := classifyError(payload); ok {
+	if ev, ok := classifyError(payload, statusCode); ok {
 		ev.StreamError.ResetAt = extractAgentLimitResetTime(payload)
 		return ev
 	}
 
 	if statusCode != 0 && statusCode != 200 {
 		resetAt := extractAgentLimitResetTime(payload)
+		cat, q := qoderstream.ClassifyBusiness(statusCode, "", payload)
 		return SSEEvent{
 			Type:        SSEError,
-			StreamError: &StreamError{Code: statusCode, Message: statusCategory(statusCode), ResetAt: resetAt},
+			StreamError: &StreamError{Code: statusCode, Message: cat, ResetAt: resetAt, OuterCode: statusCode, Queue: q},
 		}
 	}
 
@@ -131,7 +137,7 @@ func classifyEvent(payload string) SSEEvent {
 	return classifyChoices(payload)
 }
 
-func classifyError(raw string) (SSEEvent, bool) {
+func classifyError(raw string, outer int) (SSEEvent, bool) {
 	var we wireError
 	if err := json.Unmarshal([]byte(raw), &we); err != nil || we.Code == "" {
 		return SSEEvent{}, false
@@ -140,11 +146,14 @@ func classifyError(raw string) (SSEEvent, bool) {
 	if err != nil {
 		return SSEEvent{}, false
 	}
+	cat, q := qoderstream.ClassifyBusiness(int(code), we.Message, raw)
 	return SSEEvent{
 		Type: SSEError,
 		StreamError: &StreamError{
-			Code:    int(code),
-			Message: safeErrorCategory(we.Message),
+			Code:      int(code),
+			Message:   cat,
+			OuterCode: outer,
+			Queue:     q,
 		},
 	}, true
 }
@@ -164,6 +173,7 @@ func classifyUsage(raw string) (SSEEvent, bool) {
 			CompletionTokens: wu.Usage.CompletionTokens,
 			TotalTokens:      wu.Usage.TotalTokens,
 			ReasoningTokens:  wu.Usage.CompletionTokensDetails.ReasoningTokens,
+			CachedTokens:     wu.Usage.PromptTokensDetails.CachedTokens,
 		},
 	}, true
 }

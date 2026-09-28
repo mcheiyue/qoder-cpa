@@ -30,8 +30,8 @@ func TestSSEParser_BusinessError(t *testing.T) {
 	if evt.StreamError.Code != 10605 {
 		t.Errorf("code: got %d, want 10605", evt.StreamError.Code)
 	}
-	if evt.StreamError.Message != "queue_full" {
-		t.Errorf("message: got %q, want %q", evt.StreamError.Message, "queue_full")
+	if evt.StreamError.Message != "queue_unavailable" {
+		t.Errorf("message: got %q, want %q", evt.StreamError.Message, "queue_unavailable")
 	}
 }
 
@@ -55,8 +55,8 @@ func TestSSEParser_StatusCodeValueBusinessError(t *testing.T) {
 	if evt.StreamError.Code != 10605 {
 		t.Errorf("code: got %d, want 10605", evt.StreamError.Code)
 	}
-	if evt.StreamError.Message != "queue_full" {
-		t.Errorf("message: got %q, want %q", evt.StreamError.Message, "queue_full")
+	if evt.StreamError.Message != "queue_unavailable" {
+		t.Errorf("message: got %q, want %q", evt.StreamError.Message, "queue_unavailable")
 	}
 }
 

@@ -15,6 +15,7 @@ type SSEParser struct {
 	event        string
 	seenTerminal bool
 	aborted      bool
+	textTail     string // rolling tail of adjacent text deltas for rate-limit phrases
 }
 
 // NewSSEParser wraps a reader in an incremental SSE parser.
@@ -106,8 +107,28 @@ func (p *SSEParser) dispatch() SSEEvent {
 	}
 
 	ev := classifyEvent(raw)
+	if ev.Type == SSETextDelta && ev.TextDelta != nil {
+		// Keep a rolling tail of adjacent text deltas so a rate-limit phrase
+		// split across chunks is still detected.
+		p.textTail = rateTail(p.textTail, ev.TextDelta.Content)
+		if isRateLimitText(p.textTail) {
+			ev = SSEEvent{Type: SSEError, StreamError: &StreamError{Code: 429, Message: "rate_limited"}}
+		}
+	} else {
+		p.textTail = ""
+	}
 	if ev.Type == SSETerminal {
 		p.seenTerminal = true
 	}
 	return ev
+}
+
+// rateTail keeps only the last bytes needed to span the rate-limit phrase.
+func rateTail(prev, add string) string {
+	s := prev + add
+	const maxTail = 96
+	if len(s) > maxTail {
+		s = s[len(s)-maxTail:]
+	}
+	return s
 }

@@ -16,7 +16,7 @@ func parseBusinessTest(t *testing.T, payload string) SSEEvent {
 
 func TestSSEParser_BusinessError10605(t *testing.T) {
 	evt := parseBusinessTest(t, `{"code":10605,"message":"queue_full"}`)
-	if evt.Type != SSEError || evt.StreamError == nil || evt.StreamError.Code != 10605 || evt.StreamError.Message != "queue_full" {
+	if evt.Type != SSEError || evt.StreamError == nil || evt.StreamError.Code != 10605 || evt.StreamError.Message != "queue_unavailable" {
 		t.Fatalf("event=%+v", evt)
 	}
 }

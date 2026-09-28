@@ -3,6 +3,8 @@ package cosy
 import (
 	"errors"
 	"time"
+
+	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/qoderstream"
 )
 
 // SSEEventKind enumerates event types.
@@ -54,13 +56,16 @@ type Usage struct {
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
 	ReasoningTokens  int `json:"reasoning_tokens"`
+	CachedTokens     int `json:"cached_tokens"`
 }
 
 // StreamError carries a typed error with a safe category.
 type StreamError struct {
-	Code    int       `json:"code"`
-	Message string    `json:"message"`
-	ResetAt time.Time `json:"-"` // populated from agentLimitResetTime when present
+	Code      int                       `json:"code"`
+	Message   string                    `json:"message"`
+	ResetAt   time.Time                 `json:"-"` // populated from agentLimitResetTime when present
+	OuterCode int                       `json:"-"` // outer statusCodeValue wrapper (0 when none)
+	Queue     *qoderstream.QueuePayload `json:"-"` // structured queue payload when present
 }
 
 // Sentinel errors returned by the parser.

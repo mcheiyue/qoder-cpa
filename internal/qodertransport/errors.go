@@ -1,21 +1,35 @@
 package qodertransport
 
-import "time"
+import (
+	"time"
+
+	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/qoderstream"
+)
 
 // StreamBusinessError is a typed error for SSE business errors that
 // carries structured code/category/reset-at without exposing raw upstream body.
 type StreamBusinessError struct {
-	Code     int
-	Category string
-	ResetAt  time.Time // zero if not present
-	raw      string    // private, not exposed
+	Code      int
+	Category  string
+	ResetAt   time.Time                 // zero if not present
+	OuterCode int                       // outer HTTP/wrapper status (0 when absent)
+	Queue     *qoderstream.QueuePayload // structured queue payload when present
+	raw       string                    // private, not exposed
 }
 
 func (e *StreamBusinessError) Error() string {
-	if !e.ResetAt.IsZero() {
-		return "qodertransport: upstream stream error " + itoa(e.Code) + " (" + e.Category + ") reset=" + e.ResetAt.Format(time.RFC3339)
+	base := "qodertransport: upstream stream error " + itoa(e.Code) + " (" + e.Category + ")"
+	if e.Queue != nil {
+		if e.Queue.RetryAfterSeconds > 0 {
+			base += " retry=" + itoa(e.Queue.RetryAfterSeconds) + "s"
+		} else if e.Queue.WaitTime > 0 {
+			base += " wait=" + itoa(e.Queue.WaitTime) + "s"
+		}
 	}
-	return "qodertransport: upstream stream error " + itoa(e.Code) + " (" + e.Category + ")"
+	if !e.ResetAt.IsZero() {
+		base += " reset=" + e.ResetAt.Format(time.RFC3339)
+	}
+	return base
 }
 
 // itoa is a minimal int-to-string to avoid importing strconv here.

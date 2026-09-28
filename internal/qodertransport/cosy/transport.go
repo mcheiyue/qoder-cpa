@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/qoderstream"
 )
 
 // ErrInvalidTestEndpoint is returned when BaseURL is set without AllowTestEndpoint or with a non-loopback address.
@@ -188,10 +190,11 @@ func (t *Transport) Stream(ctx context.Context, req StreamRequest) (*StreamRespo
 		streamCancel()
 		body, readErr := readAndClose(resp.Body)
 		return nil, &HTTPError{
-			StatusCode: resp.StatusCode,
-			category:   classifyHTTPStatus(resp.StatusCode),
-			detail:     summarizeErrorBody(body),
-			readErr:    readErr,
+			StatusCode:    resp.StatusCode,
+			category:      classifyHTTPStatus(resp.StatusCode),
+			detail:        summarizeErrorBody(body),
+			readErr:       readErr,
+			RetryAfterSec: qoderstream.ParseRetryAfter(resp.Header.Get("Retry-After"), time.Now()),
 		}
 	}
 	// Validate Content-Type is text/event-stream (allow charset).

@@ -3,6 +3,8 @@ package bearer
 import (
 	"errors"
 	"time"
+
+	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/qoderstream"
 )
 
 // SSEEventType enumerates event types.
@@ -57,9 +59,11 @@ type ToolDelta struct {
 
 // StreamError carries a typed error with a safe category.
 type StreamError struct {
-	Code    int       `json:"code"`
-	Message string    `json:"message"`
-	ResetAt time.Time `json:"-"` // populated from agentLimitResetTime when present
+	Code      int                       `json:"code"`
+	Message   string                    `json:"message"`
+	ResetAt   time.Time                 `json:"-"` // populated from agentLimitResetTime when present
+	OuterCode int                       `json:"-"` // outer statusCodeValue wrapper (0 when none)
+	Queue     *qoderstream.QueuePayload `json:"-"` // structured queue payload when present
 }
 
 // Sentinel errors returned by the parser.
