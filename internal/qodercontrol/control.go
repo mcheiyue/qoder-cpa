@@ -11,6 +11,9 @@ import (
 
 const defaultBodyLimit int64 = 1 << 20 // 1 MiB
 
+// controlCosyVersion mirrors qodertransport's defaultCosyVersion for sash routes.
+const controlCosyVersion = "1.1.34"
+
 // Config holds endpoint configuration for the Qoder control plane.
 type Config struct {
 	BaseURL       string        // default "https://openapi.qoder.sh"
@@ -94,6 +97,19 @@ func isLoopback(host string) bool {
 
 // doRequest executes an HTTP request with Bearer auth and body limit.
 func (c *Client) doRequest(ctx context.Context, method, endpoint, token string) ([]byte, error) {
+	return c.doRequestWithHeaders(ctx, method, endpoint, token, nil)
+}
+
+// doControlRequest executes a request against the sash control-plane routes,
+// which require Cosy-ClientType/Cosy-Version headers in addition to Bearer auth.
+func (c *Client) doControlRequest(ctx context.Context, method, endpoint, token string) ([]byte, error) {
+	return c.doRequestWithHeaders(ctx, method, endpoint, token, map[string]string{
+		"Cosy-ClientType": "10",
+		"Cosy-Version":    controlCosyVersion,
+	})
+}
+
+func (c *Client) doRequestWithHeaders(ctx context.Context, method, endpoint, token string, extra map[string]string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, nil)
 	if err != nil {
 		return nil, ErrInvalidEndpoint
@@ -102,6 +118,9 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint, token string) 
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	req.Header.Set("Accept", "application/json")
+	for k, v := range extra {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
