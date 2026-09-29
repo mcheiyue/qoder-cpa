@@ -37,10 +37,14 @@ const (
 
 // Credential holds the persistent state for an authenticated Qoder account.
 type Credential struct {
-	AccessToken      string
-	RefreshToken     string
-	ExpiresAt        time.Time
-	UserID           string
+	AccessToken  string
+	RefreshToken string
+	ExpiresAt    time.Time
+	UserID       string
+	// UserType is the account class from Qoder quota/profile endpoints
+	// (e.g. personal_standard). Empty means missing: never fill it with a
+	// static account class.
+	UserType         string
 	MachineID        MachineID
 	Email            string
 	OrganizationID   string
@@ -58,6 +62,7 @@ type StorageJSON struct {
 	RefreshToken     string           `json:"refresh_token"`
 	ExpiresAt        time.Time        `json:"expires_at"`
 	UserID           string           `json:"user_id"`
+	UserType         string           `json:"user_type,omitempty"`
 	MachineID        MachineID        `json:"machine_id,omitempty"`
 	Email            string           `json:"email"`
 	OrganizationID   string           `json:"organization_id,omitempty"`
@@ -168,6 +173,7 @@ func FromCredential(c Credential) StorageJSON {
 		RefreshToken:     c.RefreshToken,
 		ExpiresAt:        c.ExpiresAt,
 		UserID:           c.UserID,
+		UserType:         c.UserType,
 		MachineID:        c.MachineID,
 		Email:            c.Email,
 		OrganizationID:   c.OrganizationID,
@@ -185,6 +191,7 @@ func (s StorageJSON) ToCredential() Credential {
 		RefreshToken:     s.RefreshToken,
 		ExpiresAt:        s.ExpiresAt,
 		UserID:           s.UserID,
+		UserType:         s.UserType,
 		MachineID:        s.MachineID,
 		Email:            s.Email,
 		OrganizationID:   s.OrganizationID,

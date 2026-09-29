@@ -25,6 +25,7 @@ func TestEmbeddedWebUISendsManagementKey(t *testing.T) {
 		"id=\"g1-credits\"",
 		"id=\"g1-seat\"",
 		"id=\"g1-claim\"",
+		"action_type === 'CLAIM_BENEFIT'",
 	} {
 		if !strings.Contains(html, required) {
 			t.Fatalf("embedded web UI missing %q", required)

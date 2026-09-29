@@ -12,11 +12,13 @@ import (
 )
 
 const (
-	campaignsPath   = "/sash/api/v1/me/campaigns"
-	actionClaim     = "CLAIM_BENEFIT"
-	statusClaimable = "CLAIMABLE"
-	statusExpired   = "EXPIRED"
-	statusClaimed   = "CLAIMED"
+	campaignsPath = "/sash/api/v1/me/campaigns"
+	// ActionClaimBenefit is the only campaign actionType eligible for claim.
+	// The management layer re-checks it before calling ClaimCampaign.
+	ActionClaimBenefit = "CLAIM_BENEFIT"
+	statusClaimable    = "CLAIMABLE"
+	statusExpired      = "EXPIRED"
+	statusClaimed      = "CLAIMED"
 )
 
 // Benefit describes a campaign reward.
@@ -71,8 +73,8 @@ func (c *Client) FetchCampaigns(ctx context.Context, cred qoderauth.Credential) 
 // ClaimCampaign claims a single campaign. Non-CLAIMABLE or non-CLAIM_BENEFIT
 // entries are rejected locally without an HTTP request.
 func (c *Client) ClaimCampaign(ctx context.Context, cred qoderauth.Credential, campaign Campaign) (*ClaimResult, error) {
-	if campaign.ActionType != actionClaim {
-		return nil, fmt.Errorf("qodercontrol: campaign %s has action %q, want %s", campaign.CampaignID, campaign.ActionType, actionClaim)
+	if campaign.ActionType != ActionClaimBenefit {
+		return nil, fmt.Errorf("qodercontrol: campaign %s has action %q, want %s", campaign.CampaignID, campaign.ActionType, ActionClaimBenefit)
 	}
 	if campaign.ClaimStatus != statusClaimable {
 		outcome := "rejected"

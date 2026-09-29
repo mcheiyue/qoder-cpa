@@ -15,26 +15,28 @@ const (
 
 // chatBody is the Qoder CLI request payload.
 type chatBody struct {
-	RequestID    string            `json:"request_id"`
-	RequestSetID string            `json:"request_set_id"`
-	ChatRecordID string            `json:"chat_record_id"`
-	SessionID    string            `json:"session_id"`
-	Stream       bool              `json:"stream"`
-	ChatTask     string            `json:"chat_task"`
-	ChatContext  json.RawMessage   `json:"chat_context"`
-	IsReply      bool              `json:"is_reply"`
-	IsRetry      bool              `json:"is_retry"`
-	Source       int               `json:"source"`
-	Version      string            `json:"version"`
-	AgentID      string            `json:"agent_id"`
-	TaskID       string            `json:"task_id"`
-	SessionType  string            `json:"session_type"`
-	ModelConfig  modelConfigWire   `json:"model_config"`
-	System       string            `json:"system,omitempty"`
-	Messages     []chatMessage     `json:"messages"`
-	Tools        []json.RawMessage `json:"tools"`
-	Parameters   json.RawMessage   `json:"parameters"`
-	Business     businessInfo      `json:"business"`
+	RequestID    string          `json:"request_id"`
+	RequestSetID string          `json:"request_set_id"`
+	ChatRecordID string          `json:"chat_record_id"`
+	SessionID    string          `json:"session_id"`
+	Stream       bool            `json:"stream"`
+	ChatTask     string          `json:"chat_task"`
+	ChatContext  json.RawMessage `json:"chat_context"`
+	IsReply      bool            `json:"is_reply"`
+	IsRetry      bool            `json:"is_retry"`
+	Source       int             `json:"source"`
+	Version      string          `json:"version"`
+	AgentID      string          `json:"agent_id"`
+	TaskID       string          `json:"task_id"`
+	SessionType  string          `json:"session_type"`
+	// AliyunUserType is omitted when empty so the default wire is unchanged.
+	AliyunUserType string            `json:"aliyun_user_type,omitempty"`
+	ModelConfig    modelConfigWire   `json:"model_config"`
+	System         string            `json:"system,omitempty"`
+	Messages       []chatMessage     `json:"messages"`
+	Tools          []json.RawMessage `json:"tools"`
+	Parameters     json.RawMessage   `json:"parameters"`
+	Business       businessInfo      `json:"business"`
 }
 
 type modelConfigWire struct {

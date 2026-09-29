@@ -39,6 +39,14 @@ func (s *managementService) refreshQuota(ctx context.Context, raw []byte) (plugi
 	if quota == nil {
 		return jsonManagementError(http.StatusBadGateway, "quota refresh failed"), nil
 	}
+	// Persist only the real UserType reported by quota/profile endpoints.
+	// Missing (empty) never overwrites storage with a static account class.
+	if quota.UserType != "" && quota.UserType != storage.UserType {
+		storage.UserType = quota.UserType
+		if encoded, err := json.Marshal(storage); err == nil && auth.Name != "" {
+			_, _ = s.hostCall(pluginabi.MethodHostAuthSave, pluginapi.HostAuthSaveRequest{Name: auth.Name, JSON: encoded})
+		}
+	}
 	return jsonManagementResponse(http.StatusOK, response)
 }
 

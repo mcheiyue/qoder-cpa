@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -130,8 +131,15 @@ func (s *managementService) claimCampaign(ctx context.Context, raw []byte) (plug
 	if target == nil {
 		return jsonManagementError(http.StatusNotFound, "campaign not found"), nil
 	}
+	// Local rejection: only CLAIM_BENEFIT campaigns are claimable. Returning 400
+	// here (instead of letting ClaimCampaign fail into a 502) keeps a missing
+	// claim button honest and never reaches the upstream claim endpoint.
+	if target.ActionType != qodercontrol.ActionClaimBenefit {
+		return jsonManagementError(http.StatusBadRequest, "campaign action is not claimable"), nil
+	}
 	result, claimErr := s.doClaimCampaign(ctxOrBackground(ctx), cred, *target)
 	if claimErr != nil || result == nil {
+		log.Printf("[qoder-cpa] campaign claim failed: auth_index=%s campaign_id=%s err=%v", strings.TrimSpace(request.AuthIndex), target.CampaignID, claimErr)
 		return jsonManagementError(http.StatusBadGateway, "campaign claim failed"), nil
 	}
 	return jsonManagementResponse(http.StatusOK, managementClaimResponse{

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -120,6 +121,65 @@ func TestManagementCampaignClaimOutcomeAndUnknownID(t *testing.T) {
 		pluginapi.ManagementRequest{Body: []byte(`{"auth_index":"qoder-1","campaign_id":"nope"}`)})
 	if err != nil || missing.StatusCode != http.StatusNotFound {
 		t.Fatalf("missing response=%+v err=%v", missing, err)
+	}
+}
+
+// TestManagementCampaignClaimRejectsNonClaimBenefit locks the local-rejection
+// semantics: a CLAIMABLE campaign whose action_type is not CLAIM_BENEFIT must
+// fail locally with 400 and never reach doClaimCampaign (real upstream claim).
+// Regression for the production 502 seen on VIEW_DETAILS campaigns.
+func TestManagementCampaignClaimRejectsNonClaimBenefit(t *testing.T) {
+	previous := defaultManagementService
+	t.Cleanup(func() { defaultManagementService = previous })
+	defaultManagementService = &managementService{
+		hostCall: g1HostCall(),
+		fetchCampaigns: func(context.Context, qoderauth.Credential) (*qodercontrol.CampaignsResult, error) {
+			return &qodercontrol.CampaignsResult{Campaigns: []qodercontrol.Campaign{
+				{CampaignID: "c-view", ActionType: "VIEW_DETAILS", ClaimStatus: "CLAIMABLE"},
+			}}, nil
+		},
+		doClaimCampaign: func(context.Context, qoderauth.Credential, qodercontrol.Campaign) (*qodercontrol.ClaimResult, error) {
+			t.Fatal("doClaimCampaign must not be called for non-CLAIM_BENEFIT campaign")
+			return nil, nil
+		},
+	}
+	response, err := (managementHandler{kind: "campaign-claim"}).HandleManagement(context.Background(),
+		pluginapi.ManagementRequest{Body: []byte(`{"auth_index":"qoder-1","campaign_id":"c-view"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", response.StatusCode, response.Body)
+	}
+	if !strings.Contains(string(response.Body), "not claimable") {
+		t.Fatalf("body=%s", response.Body)
+	}
+}
+
+// TestManagementCampaignClaimUpstreamErrorLogged locks that a real upstream
+// claim failure still returns 502 (it is a gateway-level failure, unlike the
+// local 400 above), keeping the two paths distinguishable.
+func TestManagementCampaignClaimUpstreamErrorStill502(t *testing.T) {
+	previous := defaultManagementService
+	t.Cleanup(func() { defaultManagementService = previous })
+	defaultManagementService = &managementService{
+		hostCall: g1HostCall(),
+		fetchCampaigns: func(context.Context, qoderauth.Credential) (*qodercontrol.CampaignsResult, error) {
+			return &qodercontrol.CampaignsResult{Campaigns: []qodercontrol.Campaign{
+				{CampaignID: "c-1", ActionType: "CLAIM_BENEFIT", ClaimStatus: "CLAIMABLE"},
+			}}, nil
+		},
+		doClaimCampaign: func(context.Context, qoderauth.Credential, qodercontrol.Campaign) (*qodercontrol.ClaimResult, error) {
+			return nil, errors.New("upstream 502 from claim endpoint")
+		},
+	}
+	response, err := (managementHandler{kind: "campaign-claim"}).HandleManagement(context.Background(),
+		pluginapi.ManagementRequest{Body: []byte(`{"auth_index":"qoder-1","campaign_id":"c-1"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusBadGateway {
+		t.Fatalf("status=%d body=%s", response.StatusCode, response.Body)
 	}
 }
 

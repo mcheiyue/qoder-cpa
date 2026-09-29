@@ -45,6 +45,12 @@ type BuildRequestInput struct {
 	ModelConfig  ModelConfigIn
 	CosyVersion  string
 	BeginAt      time.Time
+	// SessionType overrides the wire session_type; empty keeps the current
+	// production value ("qodercli") until queue-identity qualification passes.
+	SessionType string
+	// AliyunUserType is injected into the body only when non-empty, so the
+	// default wire stays byte-identical to current production.
+	AliyunUserType string
 }
 
 // CatalogRequestParts contains the signed, bodyless model-catalog request.
@@ -127,6 +133,10 @@ func BuildChatBody(in BuildRequestInput) ([]byte, error) {
 		source = "system"
 	}
 	beginAt := in.BeginAt.UnixMilli()
+	sessionType := in.SessionType
+	if sessionType == "" {
+		sessionType = "qodercli"
+	}
 	var paramsRaw json.RawMessage = json.RawMessage("{}")
 	if in.Parameters != nil {
 		serialized, err := json.Marshal(in.Parameters)
@@ -136,24 +146,25 @@ func BuildChatBody(in BuildRequestInput) ([]byte, error) {
 		paramsRaw = serialized
 	}
 	body := chatBody{
-		RequestID:    in.RequestID,
-		RequestSetID: in.RequestID,
-		ChatRecordID: in.RequestID,
-		SessionID:    in.SessionID,
-		Stream:       true,
-		ChatTask:     "FREE_INPUT",
-		ChatContext:  json.RawMessage("{}"),
-		IsReply:      true,
-		IsRetry:      false,
-		Source:       1,
-		Version:      "3",
-		AgentID:      "agent_common",
-		TaskID:       "common",
-		SessionType:  "qodercli",
-		System:       in.SystemPrompt,
-		Messages:     msgs,
-		Tools:        in.Tools,
-		Parameters:   paramsRaw,
+		RequestID:      in.RequestID,
+		RequestSetID:   in.RequestID,
+		ChatRecordID:   in.RequestID,
+		SessionID:      in.SessionID,
+		Stream:         true,
+		ChatTask:       "FREE_INPUT",
+		ChatContext:    json.RawMessage("{}"),
+		IsReply:        true,
+		IsRetry:        false,
+		Source:         1,
+		Version:        "3",
+		AgentID:        "agent_common",
+		TaskID:         "common",
+		SessionType:    sessionType,
+		AliyunUserType: in.AliyunUserType,
+		System:         in.SystemPrompt,
+		Messages:       msgs,
+		Tools:          in.Tools,
+		Parameters:     paramsRaw,
 		ModelConfig: modelConfigWire{
 			Key:            in.ModelKey,
 			Format:         format,
