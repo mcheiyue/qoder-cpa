@@ -5,8 +5,8 @@ licenses, and any usage restrictions.
 
 ## CLIProxyAPI SDK
 
-- **Package:** github.com/router-for-me/CLIProxyAPI/v7
-- **Version:** v7.3.7
+- **Package:** github.com/router-for-me/CLIProxyAPI/v8
+- **Version:** v8.0.4
 - **License:** MIT
 - **Usage:** Plugin ABI types, host callback definitions, schema constants.
 - **Source:** https://github.com/router-for-me/CLIProxyAPI

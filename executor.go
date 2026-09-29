@@ -10,8 +10,8 @@ import (
 
 	"github.com/mcheiyue/qoder-cpa/internal/qoderauth"
 	"github.com/mcheiyue/qoder-cpa/internal/qodertransport"
-	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
-	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
 const executorID = "qoder"

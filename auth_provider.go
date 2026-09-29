@@ -10,7 +10,7 @@ import (
 	"github.com/mcheiyue/qoder-cpa/internal/qoderauth"
 	"github.com/mcheiyue/qoder-cpa/internal/qodercontrol"
 	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/cosy"
-	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
 type authService struct {

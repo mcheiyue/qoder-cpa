@@ -11,8 +11,8 @@ import (
 
 	"github.com/mcheiyue/qoder-cpa/internal/qoderauth"
 	"github.com/mcheiyue/qoder-cpa/internal/qodercontrol"
-	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
-	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
 func g1HostCall() func(string, any) (json.RawMessage, error) {
