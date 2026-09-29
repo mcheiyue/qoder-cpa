@@ -51,6 +51,9 @@ type BuildRequestInput struct {
 	// AliyunUserType is injected into the body only when non-empty, so the
 	// default wire stays byte-identical to current production.
 	AliyunUserType string
+	// BusinessProduct overrides business.product (and the Cosy-Business-Product
+	// header via StreamRequest); empty keeps the production value "cli".
+	BusinessProduct string
 }
 
 // CatalogRequestParts contains the signed, bodyless model-catalog request.
@@ -137,6 +140,10 @@ func BuildChatBody(in BuildRequestInput) ([]byte, error) {
 	if sessionType == "" {
 		sessionType = "qodercli"
 	}
+	product := in.BusinessProduct
+	if product == "" {
+		product = "cli"
+	}
 	var paramsRaw json.RawMessage = json.RawMessage("{}")
 	if in.Parameters != nil {
 		serialized, err := json.Marshal(in.Parameters)
@@ -175,7 +182,7 @@ func BuildChatBody(in BuildRequestInput) ([]byte, error) {
 			MaxInputTokens: in.ModelConfig.MaxInputTokens,
 		},
 		Business: businessInfo{
-			Product: "cli",
+			Product: product,
 			Version: in.CosyVersion,
 			Type:    "agent",
 			ID:      in.RequestID,

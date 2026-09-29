@@ -62,7 +62,7 @@ func (a *cosyAdapter) StreamChat(ctx context.Context, req StreamRequest) (Stream
 	}
 	response, err := a.transport.Stream(ctx, cosy.StreamRequest{
 		RuntimeFields: a.runtime, RequestBody: body, RequestID: req.ID, CosyVersion: defaultCosyVersion,
-		ModelKey: input.ModelKey, ModelSource: input.ModelSource,
+		ModelKey: input.ModelKey, ModelSource: input.ModelSource, BusinessProduct: input.BusinessProduct,
 	})
 	if err != nil {
 		return nil, err

@@ -86,6 +86,9 @@ type StreamRequest struct {
 	CosyVersion   string
 	ModelKey      string
 	ModelSource   string
+	// BusinessProduct overrides the Cosy-Business-Product header; empty keeps
+	// the production value "cli". Must match the body's business.product.
+	BusinessProduct string
 }
 
 // StreamResponse holds the SSE parser for a streaming response.
@@ -145,7 +148,11 @@ func (t *Transport) Stream(ctx context.Context, req StreamRequest) (*StreamRespo
 	httpReq.Header.Set("Cache-Control", "no-cache")
 	httpReq.Header.Set("Connection", "keep-alive")
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Cosy-Business-Product", "cli")
+	product := req.BusinessProduct
+	if product == "" {
+		product = "cli"
+	}
+	httpReq.Header.Set("Cosy-Business-Product", product)
 	httpReq.Header.Set("Cosy-Business-Type", "agent")
 	httpReq.Header.Set("Cosy-ClientType", "5")
 	dataPolicy := t.dataPolicy
