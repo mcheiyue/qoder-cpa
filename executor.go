@@ -82,9 +82,9 @@ func (s executorService) open(ctx context.Context, req rpcExecutorRequest) (qode
 		requestID = strings.TrimSpace(req.AuthID)
 	}
 	sessionID := strings.TrimSpace(req.Headers.Get("X-Session-Id"))
-	return transport.StreamChat(ctx, qodertransport.StreamRequest{
+	return queueAwait(ctx, transport, qodertransport.StreamRequest{
 		Body: req.Payload, ID: requestID, SessionID: sessionID,
-	})
+	}, defaultQueueWaitPolicy())
 }
 
 func isChatExecutorFormat(format string) bool {
