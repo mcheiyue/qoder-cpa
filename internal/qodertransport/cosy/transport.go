@@ -89,6 +89,9 @@ type StreamRequest struct {
 	// BusinessProduct overrides the Cosy-Business-Product header; empty keeps
 	// the production value "cli". Must match the body's business.product.
 	BusinessProduct string
+	// HeaderOverrides replaces individual outbound headers after defaults are
+	// set. F2b qualification probes only; nil keeps the production wire.
+	HeaderOverrides map[string]string
 }
 
 // StreamResponse holds the SSE parser for a streaming response.
@@ -183,6 +186,9 @@ func (t *Transport) Stream(ctx context.Context, req StreamRequest) (*StreamRespo
 	httpReq.Header.Set("Cosy-Scene", "assistant")
 	httpReq.Header.Set("Cosy-Version", parts.CosyVersion)
 	httpReq.Header.Set("Login-Version", "v2")
+	for k, v := range req.HeaderOverrides {
+		httpReq.Header.Set(k, v)
+	}
 	httpReq.ContentLength = int64(len(parts.Body))
 
 	resp, err := t.httpClient.Do(httpReq)
