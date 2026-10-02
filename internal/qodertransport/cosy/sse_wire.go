@@ -48,11 +48,13 @@ type wireUsage struct {
 }
 
 type wireUsageDetail struct {
-	PromptTokens        int `json:"prompt_tokens"`
-	CompletionTokens    int `json:"completion_tokens"`
-	TotalTokens         int `json:"total_tokens"`
+	PromptTokens        int   `json:"prompt_tokens"`
+	CompletionTokens    int   `json:"completion_tokens"`
+	TotalTokens         int   `json:"total_tokens"`
+	Billable            *bool `json:"billable"`
 	PromptTokensDetails struct {
-		CachedTokens int `json:"cached_tokens"`
+		CachedTokens    int `json:"cached_tokens"`
+		CacheableTokens int `json:"cacheable_tokens"`
 	} `json:"prompt_tokens_details"`
 	CompletionTokensDetails struct {
 		ReasoningTokens int `json:"reasoning_tokens"`
@@ -174,6 +176,8 @@ func classifyUsage(raw string) (SSEEvent, bool) {
 			TotalTokens:      wu.Usage.TotalTokens,
 			ReasoningTokens:  wu.Usage.CompletionTokensDetails.ReasoningTokens,
 			CachedTokens:     wu.Usage.PromptTokensDetails.CachedTokens,
+			CacheableTokens:  wu.Usage.PromptTokensDetails.CacheableTokens,
+			Billable:         wu.Usage.Billable,
 		},
 	}, true
 }

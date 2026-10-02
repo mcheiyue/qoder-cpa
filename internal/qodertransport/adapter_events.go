@@ -30,7 +30,7 @@ func cosyEventChunk(id, model string, event cosy.SSEEvent, state *handleState) (
 		if event.Usage == nil {
 			return nil, false, nil
 		}
-		return usageChunk(id, model, event.Usage.PromptTokens, event.Usage.CompletionTokens, event.Usage.TotalTokens, event.Usage.ReasoningTokens, event.Usage.CachedTokens)
+		return usageChunk(id, model, event.Usage.PromptTokens, event.Usage.CompletionTokens, event.Usage.TotalTokens, event.Usage.ReasoningTokens, event.Usage.CachedTokens, event.Usage.CacheableTokens, event.Usage.Billable)
 	case cosy.SSETerminal:
 		chunk, err := state.finishChunk()
 		return chunk, true, err
@@ -75,7 +75,8 @@ func bearerEventChunk(id, model string, event bearer.SSEEvent, state *handleStat
 		if event.Usage == nil {
 			return nil, false, nil
 		}
-		return usageChunk(id, model, event.Usage.PromptTokens, event.Usage.CompletionTokens, event.Usage.TotalTokens, event.Usage.ReasoningTokens, event.Usage.CachedTokens)
+		// bearer wire carries no capture fields yet; F6 locks them on the cosy path only.
+		return usageChunk(id, model, event.Usage.PromptTokens, event.Usage.CompletionTokens, event.Usage.TotalTokens, event.Usage.ReasoningTokens, event.Usage.CachedTokens, 0, nil)
 	case bearer.SSETerminal:
 		chunk, err := state.finishChunk()
 		return chunk, true, err
@@ -103,10 +104,11 @@ func deltaChunk(id, model string, delta chatDelta) ([]byte, bool, error) {
 	return chunk, true, err
 }
 
-func usageChunk(id, model string, prompt, completion, total, reasoning, cached int) ([]byte, bool, error) {
-	usage := &chatUsage{PromptTokens: prompt, CompletionTokens: completion, TotalTokens: total}
+func usageChunk(id, model string, prompt, completion, total, reasoning, cached, cacheable int, billable *bool) ([]byte, bool, error) {
+	usage := &chatUsage{PromptTokens: prompt, CompletionTokens: completion, TotalTokens: total, Billable: billable}
 	usage.CompletionTokensDetails.ReasoningTokens = reasoning
 	usage.PromptTokensDetails.CachedTokens = cached
+	usage.PromptTokensDetails.CacheableTokens = cacheable
 	chunk, err := marshalSSE(chatChunk{ID: id, Object: "chat.completion.chunk", Model: model, Choices: []chatChoice{}, Usage: usage})
 	return chunk, true, err
 }

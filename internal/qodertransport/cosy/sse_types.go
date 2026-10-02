@@ -52,11 +52,13 @@ type ToolDelta struct {
 
 // Usage carries token counts.
 type Usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
-	ReasoningTokens  int `json:"reasoning_tokens"`
-	CachedTokens     int `json:"cached_tokens"`
+	PromptTokens     int   `json:"prompt_tokens"`
+	CompletionTokens int   `json:"completion_tokens"`
+	TotalTokens      int   `json:"total_tokens"`
+	ReasoningTokens  int   `json:"reasoning_tokens"`
+	CachedTokens     int   `json:"cached_tokens"`
+	CacheableTokens  int   `json:"cacheable_tokens,omitempty"`
+	Billable         *bool `json:"billable,omitempty"`
 }
 
 // StreamError carries a typed error with a safe category.

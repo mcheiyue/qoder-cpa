@@ -39,11 +39,13 @@ type chatChoice struct {
 }
 
 type chatUsage struct {
-	PromptTokens        int `json:"prompt_tokens"`
-	CompletionTokens    int `json:"completion_tokens"`
-	TotalTokens         int `json:"total_tokens"`
+	PromptTokens        int   `json:"prompt_tokens"`
+	CompletionTokens    int   `json:"completion_tokens"`
+	TotalTokens         int   `json:"total_tokens"`
+	Billable            *bool `json:"billable,omitempty"`
 	PromptTokensDetails struct {
-		CachedTokens int `json:"cached_tokens,omitempty"`
+		CachedTokens    int `json:"cached_tokens,omitempty"`
+		CacheableTokens int `json:"cacheable_tokens,omitempty"`
 	} `json:"prompt_tokens_details,omitempty"`
 	CompletionTokensDetails struct {
 		ReasoningTokens int `json:"reasoning_tokens,omitempty"`

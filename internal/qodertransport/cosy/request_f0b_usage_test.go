@@ -5,17 +5,19 @@ import (
 	"testing"
 )
 
-// F0b usage + tool-history fixtures: pin what the current wire parses and
-// carries, next to the QoderWork capture additions (698e8c63, ebb98ebb).
-// Targets are recorded for F6, never enabled here.
+// F0b usage + tool-history fixtures: pin what the wire parses and carries,
+// next to the QoderWork capture additions (698e8c63, ebb98ebb).
+// F6 enabled billable + prompt_tokens_details.cacheable_tokens; timing
+// (first_token_ms/total_duration_ms, event:finish frame) and the tool-history
+// additions below remain recorded but not enabled.
 
-// TestF0bUsageFixture pins the SSE usage parse: the five fields the current
-// parser keeps, and the four capture fields it drops (added only in F6).
+// TestF0bUsageFixture pins the SSE usage parse: the capture shape now
+// carried end-to-end, plus the timing fields the wire still drops.
 func TestF0bUsageFixture(t *testing.T) {
 	payload := `{"usage":{"prompt_tokens":110,"completion_tokens":22,"total_tokens":132,` +
-		`"prompt_tokens_details":{"cached_tokens":64},` +
+		`"prompt_tokens_details":{"cached_tokens":64,"cacheable_tokens":64},` +
 		`"completion_tokens_details":{"reasoning_tokens":9},` +
-		`"billable":true,"cacheable_tokens":64,` +
+		`"billable":true,` +
 		`"firstTokenMs":180,"totalDurationMs":2400}}`
 	ev, ok := classifyUsage(payload)
 	if !ok || ev.Usage == nil {
@@ -23,12 +25,11 @@ func TestF0bUsageFixture(t *testing.T) {
 	}
 	u := *ev.Usage
 	if u.PromptTokens != 110 || u.CompletionTokens != 22 || u.TotalTokens != 132 ||
-		u.CachedTokens != 64 || u.ReasoningTokens != 9 {
+		u.CachedTokens != 64 || u.ReasoningTokens != 9 ||
+		u.CacheableTokens != 64 || u.Billable == nil || !*u.Billable {
 		t.Errorf("usage = %+v", u)
 	}
 
-	// The parsed struct must stay field-for-field: adding any of the capture
-	// fields below before F6 changes what the audit layer can observe.
 	raw, err := json.Marshal(u)
 	if err != nil {
 		t.Fatal(err)
@@ -37,19 +38,19 @@ func TestF0bUsageFixture(t *testing.T) {
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatal(err)
 	}
-	for _, absent := range []string{"billable", "cacheable_tokens", "first_token_ms", "total_duration_ms"} {
+	for _, absent := range []string{"first_token_ms", "total_duration_ms"} {
 		if _, present := got[absent]; present {
-			t.Errorf("usage carries %q, want absent until F6 (698e8c63)", absent)
+			t.Errorf("usage carries %q, want absent (event:finish timing not parsed)", absent)
 		}
 	}
-	if len(got) != 5 {
-		t.Errorf("usage fields = %d, want exactly the 5 current ones: %s", len(got), raw)
+	if len(got) != 7 {
+		t.Errorf("usage fields = %d, want the 7 carried ones: %s", len(got), raw)
 	}
 }
 
 // TestF0bToolHistoryFixture pins the outbound history message shape for tool
 // and reasoning turns: raw passthrough of tool_calls, reasoning_content kept,
-// reasoning_item / cache_control / tool index absent until F6.
+// reasoning_item / cache_control / tool index still not carried.
 func TestF0bToolHistoryFixture(t *testing.T) {
 	toolCalls := json.RawMessage(`[{"id":"call-1","type":"function","function":{"name":"f","arguments":"{}"}}]`)
 	in := f0bInput()
@@ -83,10 +84,10 @@ func TestF0bToolHistoryFixture(t *testing.T) {
 		t.Errorf("tool result = %#v", toolMsg)
 	}
 
-	// Capture additions the current wire must not carry yet.
+	// Capture additions the wire still does not carry.
 	for _, absent := range []string{"reasoning_item", "cache_control"} {
 		if _, present := assist[absent]; present {
-			t.Errorf("assistant message carries %q, want absent until F6 (698e8c63/ebb98ebb)", absent)
+			t.Errorf("assistant message carries %q, want absent (698e8c63/ebb98ebb not enabled)", absent)
 		}
 	}
 	// tool_calls is raw passthrough (json.RawMessage): whatever keys the caller

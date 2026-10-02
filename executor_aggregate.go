@@ -37,10 +37,15 @@ type aggregateToolDelta struct {
 }
 
 type aggregateUsage struct {
-	PromptTokens            int  `json:"prompt_tokens"`
-	CompletionTokens        int  `json:"completion_tokens"`
-	TotalTokens             int  `json:"total_tokens"`
-	Estimated               bool `json:"estimated,omitempty"`
+	PromptTokens        int   `json:"prompt_tokens"`
+	CompletionTokens    int   `json:"completion_tokens"`
+	TotalTokens         int   `json:"total_tokens"`
+	Estimated           bool  `json:"estimated,omitempty"`
+	Billable            *bool `json:"billable,omitempty"`
+	PromptTokensDetails struct {
+		CachedTokens    int `json:"cached_tokens,omitempty"`
+		CacheableTokens int `json:"cacheable_tokens,omitempty"`
+	} `json:"prompt_tokens_details,omitempty"`
 	CompletionTokensDetails struct {
 		ReasoningTokens int `json:"reasoning_tokens"`
 	} `json:"completion_tokens_details"`
