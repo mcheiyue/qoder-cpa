@@ -113,7 +113,7 @@ func Refresh(ctx context.Context, req RefreshRequest) (*RefreshResponse, error) 
 		return nil, errors.New("qoderauth: empty client ID")
 	}
 
-	return sf.do(string(newAuthID(req.Cred.UserID)), func() (*RefreshResponse, error) {
+	return sf.do(string(AuthIDForProfile(req.Cred.UserID, req.Cred.Profile)), func() (*RefreshResponse, error) {
 		return doRefresh(ctx, req)
 	})
 }

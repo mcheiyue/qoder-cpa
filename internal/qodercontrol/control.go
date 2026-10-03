@@ -33,6 +33,16 @@ func DefaultConfig() Config {
 	}
 }
 
+// DefaultConfigCN returns the official Qoder CN HTTPS endpoints.
+func DefaultConfigCN() Config {
+	return Config{
+		BaseURL:      "https://openapi.qoder.com.cn",
+		AllowedHosts: []string{"openapi.qoder.com.cn"},
+		BodyLimit:    defaultBodyLimit,
+		Timeout:      30 * time.Second,
+	}
+}
+
 // Client queries the Qoder control plane (profile, runtime, models, quota).
 type Client struct {
 	httpClient *http.Client

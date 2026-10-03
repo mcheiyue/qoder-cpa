@@ -65,7 +65,7 @@ func TestExplicitProfile_Select_routes_to_unique_adapter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c2, c3, b := &fakeAdapter{}, &fakeAdapter{}, &fakeAdapter{}
-			sel, err := NewSelector(c2, c3, b)
+			sel, err := NewSelector(c2, c3, b, &fakeAdapter{})
 			if err != nil {
 				t.Fatalf("NewSelector: %v", err)
 			}
@@ -90,7 +90,7 @@ func TestExplicitProfile_Select_routes_to_unique_adapter(t *testing.T) {
 func TestExplicitProfile_Select_error_no_fallback(t *testing.T) {
 	c2 := &fakeAdapter{err: errors.New("upstream 500")}
 	c3, b := &fakeAdapter{}, &fakeAdapter{}
-	sel, err := NewSelector(c2, c3, b)
+	sel, err := NewSelector(c2, c3, b, &fakeAdapter{})
 	if err != nil {
 		t.Fatalf("NewSelector: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestExplicitProfile_Select_error_no_fallback(t *testing.T) {
 func TestExplicitProfile_Select_cancel_propagates_to_handle(t *testing.T) {
 	ca := &cancelAdapter{}
 	c2, c3 := &fakeAdapter{}, &fakeAdapter{}
-	sel, err := NewSelector(c2, c3, ca) // bearer-openai = 3rd param
+	sel, err := NewSelector(c2, c3, ca, &fakeAdapter{}) // bearer-openai = 3rd param
 	if err != nil {
 		t.Fatalf("NewSelector: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestExplicitProfile_Select_cancel_propagates_to_handle(t *testing.T) {
 }
 
 func TestExplicitProfile_NewSelector_rejects_nil_adapter(t *testing.T) {
-	_, err := NewSelector(nil, &fakeAdapter{}, &fakeAdapter{})
+	_, err := NewSelector(nil, &fakeAdapter{}, &fakeAdapter{}, &fakeAdapter{})
 	if err == nil {
 		t.Fatal("expected error for nil adapter")
 	}
@@ -171,7 +171,7 @@ func TestExplicitProfile_NewSelector_rejects_nil_adapter(t *testing.T) {
 
 func TestExplicitProfile_Select_empty_resolves_to_default(t *testing.T) {
 	c2, c3, b := &fakeAdapter{}, &fakeAdapter{}, &fakeAdapter{}
-	sel, err := NewSelector(c2, c3, b)
+	sel, err := NewSelector(c2, c3, b, &fakeAdapter{})
 	if err != nil {
 		t.Fatalf("NewSelector: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestExplicitProfile_Select_empty_resolves_to_default(t *testing.T) {
 }
 
 func TestExplicitProfile_Select_unknown_returns_config_error(t *testing.T) {
-	sel, err := NewSelector(&fakeAdapter{}, &fakeAdapter{}, &fakeAdapter{})
+	sel, err := NewSelector(&fakeAdapter{}, &fakeAdapter{}, &fakeAdapter{}, &fakeAdapter{})
 	if err != nil {
 		t.Fatalf("NewSelector: %v", err)
 	}

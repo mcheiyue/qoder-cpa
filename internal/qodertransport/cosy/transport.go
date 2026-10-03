@@ -48,7 +48,7 @@ type Config struct {
 
 // NewTransport validates config and returns a Transport.
 func NewTransport(cfg Config) (*Transport, error) {
-	if cfg.Endpoint != EndpointAPI2 && cfg.Endpoint != EndpointAPI3 {
+	if cfg.Endpoint != EndpointAPI2 && cfg.Endpoint != EndpointAPI3 && cfg.Endpoint != EndpointCN {
 		return nil, ErrUnknownEndpoint
 	}
 	if cfg.BaseURL != "" && (!cfg.AllowTestEndpoint || !isLoopbackURL(cfg.BaseURL)) {

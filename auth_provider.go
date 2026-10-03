@@ -14,12 +14,21 @@ import (
 )
 
 type authService struct {
-	oauthConfig   qoderauth.OAuthConfig
-	controlConfig qodercontrol.Config
+	oauthConfig     qoderauth.OAuthConfig
+	oauthConfigCN   qoderauth.OAuthConfig
+	controlConfig   qodercontrol.Config
+	controlConfigCN qodercontrol.Config
 }
 
 var defaultAuthService = authService{
-	oauthConfig: qoderauth.DefaultConfig(), controlConfig: qodercontrol.DefaultConfig(),
+	oauthConfig: qoderauth.DefaultConfig(), oauthConfigCN: qoderauth.DefaultConfigCN(),
+	controlConfig: qodercontrol.DefaultConfig(), controlConfigCN: qodercontrol.DefaultConfigCN(),
+}
+
+// regionIsCN reports whether login metadata selects the CN region.
+func regionIsCN(md map[string]any) bool {
+	v, _ := md["region"].(string)
+	return strings.EqualFold(v, "cn")
 }
 
 type rpcAuthLoginStartRequest struct {
@@ -48,7 +57,7 @@ func authData(cred qoderauth.Credential, fileName string) (pluginapi.AuthData, e
 	if err != nil {
 		return pluginapi.AuthData{}, fmt.Errorf("encode auth storage: %w", err)
 	}
-	id := string(qoderauth.AuthIDForUser(cred.UserID))
+	id := string(qoderauth.AuthIDForProfile(cred.UserID, cred.Profile))
 	label := cred.Email
 	if label == "" {
 		label = id
@@ -103,7 +112,11 @@ func (s authService) start(ctx context.Context, raw []byte) (pluginapi.AuthLogin
 	if err != nil {
 		return pluginapi.AuthLoginStartResponse{}, err
 	}
-	login, err := qoderauth.DeviceLogin(ctx, qoderauth.DeviceLoginRequest{Config: s.oauthConfig, Client: client})
+	cfg := s.oauthConfig
+	if regionIsCN(req.Metadata) {
+		cfg = s.oauthConfigCN
+	}
+	login, err := qoderauth.DeviceLogin(ctx, qoderauth.DeviceLoginRequest{Config: cfg, Client: client})
 	if err != nil {
 		return pluginapi.AuthLoginStartResponse{}, err
 	}
@@ -122,8 +135,12 @@ func (s authService) poll(ctx context.Context, raw []byte) (pluginapi.AuthLoginP
 	if err != nil {
 		return pluginapi.AuthLoginPollResponse{}, err
 	}
+	oauthCfg, controlCfg := s.oauthConfig, s.controlConfig
+	if regionIsCN(req.Metadata) {
+		oauthCfg, controlCfg = s.oauthConfigCN, s.controlConfigCN
+	}
 	status, err := qoderauth.PollLogin(ctx, qoderauth.PollLoginRequest{
-		Config: s.oauthConfig, Client: client, TransactionID: qoderauth.TransactionID(req.State),
+		Config: oauthCfg, Client: client, TransactionID: qoderauth.TransactionID(req.State),
 	})
 	if err != nil {
 		return pluginapi.AuthLoginPollResponse{}, err
@@ -131,7 +148,7 @@ func (s authService) poll(ctx context.Context, raw []byte) (pluginapi.AuthLoginP
 	if status.Status == qoderauth.TransactionPending {
 		return pluginapi.AuthLoginPollResponse{Status: pluginapi.AuthLoginStatusPending, Message: status.Message}, nil
 	}
-	control, err := qodercontrol.NewClient(client, s.controlConfig)
+	control, err := qodercontrol.NewClient(client, controlCfg)
 	if err != nil {
 		return pluginapi.AuthLoginPollResponse{}, err
 	}
@@ -145,7 +162,11 @@ func (s authService) poll(ctx context.Context, raw []byte) (pluginapi.AuthLoginP
 		status.Credential.OrganizationID = profile.OrganizationID
 		status.Credential.OrganizationTags = append([]string(nil), profile.OrganizationTags...)
 	}
-	status.Credential.Profile = qoderauth.TransportProfileCosyAPI2
+	if regionIsCN(req.Metadata) {
+		status.Credential.Profile = qoderauth.TransportProfileCosyCN
+	} else {
+		status.Credential.Profile = qoderauth.TransportProfileCosyAPI2
+	}
 	runtime, err := cosy.DeriveRuntimeFields(rand.Reader, cosy.RuntimeFieldInput{
 		UID: status.Credential.UserID, OrganizationID: status.Credential.OrganizationID,
 		OrganizationTags: status.Credential.OrganizationTags, DataPolicyAgreed: true,
@@ -175,8 +196,12 @@ func (s authService) refresh(ctx context.Context, raw []byte) (pluginapi.AuthRef
 	if err != nil {
 		return pluginapi.AuthRefreshResponse{}, err
 	}
+	refreshCfg := s.oauthConfig
+	if cred.Profile == qoderauth.TransportProfileCosyCN {
+		refreshCfg = s.oauthConfigCN
+	}
 	refreshed, err := qoderauth.Refresh(ctx, qoderauth.RefreshRequest{
-		Config: qoderauth.RefreshConfig{TokenURL: strings.TrimRight(s.oauthConfig.APIBaseURL, "/") + "/api/v1/deviceToken/refresh", ClientID: s.oauthConfig.ClientID},
+		Config: qoderauth.RefreshConfig{TokenURL: strings.TrimRight(refreshCfg.APIBaseURL, "/") + "/api/v1/deviceToken/refresh", ClientID: refreshCfg.ClientID},
 		Client: client, Cred: cred,
 	})
 	if err != nil {

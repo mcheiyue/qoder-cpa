@@ -76,6 +76,9 @@ func (c *Client) fetchSignedModels(ctx context.Context, cred qoderauth.Credentia
 	if cred.Profile == qoderauth.TransportProfileCosyAPI3 {
 		ep = cosy.EndpointAPI3
 	}
+	if cred.Profile == qoderauth.TransportProfileCosyCN {
+		ep = cosy.EndpointCN
+	}
 	requestID := make([]byte, 16)
 	if _, err := rand.Read(requestID); err != nil {
 		return nil, ErrModelUnavailable

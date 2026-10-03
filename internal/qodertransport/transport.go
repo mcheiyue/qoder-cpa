@@ -15,6 +15,7 @@ const (
 	ProfileCosyAPI2     TransportProfile = "cosy-api2"
 	ProfileCosyAPI3     TransportProfile = "cosy-api3"
 	ProfileBearerOpenAI TransportProfile = "bearer-openai"
+	ProfileCosyCN       TransportProfile = "cosy-cn"
 
 	// DefaultTransportProfile is the compile-time fallback when the credential
 	// stores an empty profile string. It must never change dynamically.
@@ -45,7 +46,7 @@ func (e *AdapterSetError) Error() string {
 // Unknown values return a typed ConfigError extractable via errors.As.
 func ParseTransportProfile(raw string) (TransportProfile, error) {
 	switch TransportProfile(raw) {
-	case ProfileCosyAPI2, ProfileCosyAPI3, ProfileBearerOpenAI:
+	case ProfileCosyAPI2, ProfileCosyAPI3, ProfileBearerOpenAI, ProfileCosyCN:
 		return TransportProfile(raw), nil
 	default:
 		return "", &ConfigError{Value: raw}
@@ -84,14 +85,14 @@ type ChatTransport interface {
 // Selector resolves a TransportProfile to a ChatTransport adapter.
 // The mapping is fixed at construction time; Select never modifies it.
 type Selector struct {
-	adapters [3]ChatTransport // [cosy-api2, cosy-api3, bearer-openai]
+	adapters [4]ChatTransport // [cosy-api2, cosy-api3, bearer-openai, cosy-cn]
 }
 
-// NewSelector creates a Selector with the three required adapters in
-// profile order: cosy-api2, cosy-api3, bearer-openai.
-func NewSelector(cosy2, cosy3, bearer ChatTransport) (*Selector, error) {
-	profiles := [3]TransportProfile{ProfileCosyAPI2, ProfileCosyAPI3, ProfileBearerOpenAI}
-	adapters := [3]ChatTransport{cosy2, cosy3, bearer}
+// NewSelector creates a Selector with the four required adapters in
+// profile order: cosy-api2, cosy-api3, bearer-openai, cosy-cn.
+func NewSelector(cosy2, cosy3, bearer, cn ChatTransport) (*Selector, error) {
+	profiles := [4]TransportProfile{ProfileCosyAPI2, ProfileCosyAPI3, ProfileBearerOpenAI, ProfileCosyCN}
+	adapters := [4]ChatTransport{cosy2, cosy3, bearer, cn}
 	for index, adapter := range adapters {
 		if adapter == nil {
 			return nil, &AdapterSetError{Profile: profiles[index]}
@@ -114,6 +115,8 @@ func (s *Selector) Select(raw string) (ChatTransport, error) {
 		return s.adapters[1], nil
 	case ProfileBearerOpenAI:
 		return s.adapters[2], nil
+	case ProfileCosyCN:
+		return s.adapters[3], nil
 	default:
 		// Defensive: ResolveProfile should never return an unknown profile.
 		return nil, &ConfigError{Value: string(p)}

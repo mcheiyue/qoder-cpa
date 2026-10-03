@@ -224,17 +224,6 @@ func BuildHTTPRequestAt(ep Endpoint, body []byte, fields RuntimeFields, requestI
 	}, nil
 }
 
-func catalogURL(ep Endpoint) (string, error) {
-	switch ep {
-	case EndpointAPI2:
-		return "https://api2.qoder.sh/algo/api/v2/model/list", nil
-	case EndpointAPI3:
-		return "https://api3.qoder.sh/algo/api/v2/model/list", nil
-	default:
-		return "", fmt.Errorf("%w: %v", ErrUnknownEndpoint, ep)
-	}
-}
-
 // BuildHTTPRequest constructs the signed HTTP request. Uses current time.
 func BuildHTTPRequest(ep Endpoint, body []byte, fields RuntimeFields, requestID, cosyVersion string) (*httpRequestParts, error) {
 	return BuildHTTPRequestAt(ep, body, fields, requestID, cosyVersion, time.Now())

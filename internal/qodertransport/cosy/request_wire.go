@@ -11,6 +11,7 @@ type Endpoint string
 const (
 	EndpointAPI2 Endpoint = "cosy-api2"
 	EndpointAPI3 Endpoint = "cosy-api3"
+	EndpointCN   Endpoint = "cn"
 )
 
 // chatBody is the Qoder CLI request payload.
@@ -88,6 +89,21 @@ func endpointURL(ep Endpoint) (string, error) {
 		return "https://api2.qoder.sh/algo/api/v2/service/pro/sse/agent_chat_generation?FetchKeys=llm_model_result&AgentId=agent_common&Encode=1", nil
 	case EndpointAPI3:
 		return "https://api3.qoder.sh/algo/api/v2/service/pro/sse/agent_chat_generation?FetchKeys=llm_model_result&AgentId=agent_common&Encode=1", nil
+	case EndpointCN:
+		return "https://gateway.qoder.com.cn/algo/api/v2/service/pro/sse/agent_chat_generation?FetchKeys=llm_model_result&AgentId=agent_common&Encode=1", nil
+	default:
+		return "", fmt.Errorf("%w: %v", ErrUnknownEndpoint, ep)
+	}
+}
+
+func catalogURL(ep Endpoint) (string, error) {
+	switch ep {
+	case EndpointAPI2:
+		return "https://api2.qoder.sh/algo/api/v2/model/list", nil
+	case EndpointAPI3:
+		return "https://api3.qoder.sh/algo/api/v2/model/list", nil
+	case EndpointCN:
+		return "https://gateway.qoder.com.cn/algo/api/v2/model/list", nil
 	default:
 		return "", fmt.Errorf("%w: %v", ErrUnknownEndpoint, ep)
 	}

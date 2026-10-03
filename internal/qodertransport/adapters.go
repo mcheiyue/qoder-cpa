@@ -32,11 +32,16 @@ func NewCredentialSelector(client *http.Client, cred qoderauth.Credential, resol
 	if err != nil {
 		return nil, err
 	}
+	cosyCN, err := cosy.NewTransport(cosyConfig(cosy.EndpointCN))
+	if err != nil {
+		return nil, err
+	}
 	runtime := cosy.RuntimeFields{EncryptUserInfo: cred.RuntimeInfo, Key: cred.RuntimeKey}
 	return NewSelector(
 		&cosyAdapter{transport: cosy2, runtime: runtime, resolve: resolve},
 		&cosyAdapter{transport: cosy3, runtime: runtime, resolve: resolve},
 		&bearerAdapter{transport: bearerTransport, resolve: resolve},
+		&cosyAdapter{transport: cosyCN, runtime: runtime, resolve: resolve},
 	)
 }
 
