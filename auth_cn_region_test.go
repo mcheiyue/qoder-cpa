@@ -52,6 +52,10 @@ func TestAuthLoginStartCNRegionUsesCNBase(t *testing.T) {
 	if !strings.HasPrefix(start.URL, "https://qoder.cn.test/device?") {
 		t.Fatalf("start.URL=%q, want CN device URL", start.URL)
 	}
+	// 宿主把 start 响应 Metadata 存入 OAuth session，poll 时原样带回（同 workbuddy realm 回填）。
+	if got, _ := start.Metadata["region"].(string); got != "cn" {
+		t.Fatalf("start.Metadata region=%q, want cn backfill for poll replay", got)
+	}
 }
 
 func TestAuthLoginPollCNRegionAssignsCNProfileAndIsolatedID(t *testing.T) {

@@ -11,7 +11,7 @@ func TestEmbeddedWebUISendsManagementKey(t *testing.T) {
 		"cliproxyapi-management-key",
 		"Authorization",
 		"X-Management-Key",
-		"api('/qoder-auth-url')",
+		"api('/qoder-auth-url'",
 		"cli-proxy-auth",
 		"managementKey",
 		"qoder-cpa-mgmt-key",
@@ -26,6 +26,10 @@ func TestEmbeddedWebUISendsManagementKey(t *testing.T) {
 		"id=\"g1-seat\"",
 		"id=\"g1-claim\"",
 		"action_type === 'CLAIM_BENEFIT'",
+		"id=\"login-region\"",
+		"region=cn",
+		"国内站",
+		"国际站",
 	} {
 		if !strings.Contains(html, required) {
 			t.Fatalf("embedded web UI missing %q", required)

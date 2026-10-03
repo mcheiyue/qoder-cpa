@@ -18,7 +18,7 @@
   </style>
 </head>
 <body><main>
-  <header><div><h1>Qoder 账号</h1><div class="muted">登录由 CPA 原生 Qoder OAuth 流程处理。</div></div><div class="header-actions"><button id="refresh">刷新账号状态</button><button class="primary" id="login">添加/切换 Qoder 账号</button></div></header>
+  <header><div><h1>Qoder 账号</h1><div class="muted">登录由 CPA 原生 Qoder OAuth 流程处理。</div></div><div class="header-actions"><button id="refresh">刷新账号状态</button><select id="login-region" title="登录站点" style="padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:var(--panel);color:var(--ink)"><option value="global">国际站</option><option value="cn">国内站</option></select><button class="primary" id="login">添加/切换 Qoder 账号</button></div></header>
   <div class="key-bar" id="key-bar">
     <label for="mgmt-key">管理密钥：</label>
     <input type="password" id="mgmt-key" placeholder="输入 CPA Management Key（自动记住）" autocomplete="off" spellcheck="false">
@@ -68,7 +68,7 @@
     $('refresh-campaigns').onclick = loadCampaigns;
     $('fetch-activity').onclick = loadActivity;
     let pollTimer = null;
-    $('login').onclick = async () => { if (pollTimer) clearInterval(pollTimer); try { const body = await api('/qoder-auth-url'); if (!body.url) throw new Error(body.error || '无法启动登录'); window.open(body.url, '_blank', 'noopener'); $('status').innerHTML = '等待 Qoder 授权……如果没有自动打开，请<a href="' + escapeHTML(body.url) + '" target="_blank" rel="noopener">点击此处授权</a>。'; const state = body.state; pollTimer = setInterval(async () => { try { const res = await api('/get-auth-status?state=' + encodeURIComponent(state)); if (res.status === 'ok') { clearInterval(pollTimer); pollTimer = null; status('登录成功，账号已保存。'); load(); } else if (res.status === 'error') { clearInterval(pollTimer); pollTimer = null; status('登录失败：' + (res.error || '未知错误')); } } catch (error) { clearInterval(pollTimer); pollTimer = null; status(error.message); } }, 2500); } catch (error) { status(error.message); } };
+    $('login').onclick = async () => { if (pollTimer) clearInterval(pollTimer); try { const body = await api('/qoder-auth-url' + (($('login-region').value === 'cn') ? '?region=cn' : '')); if (!body.url) throw new Error(body.error || '无法启动登录'); window.open(body.url, '_blank', 'noopener'); $('status').innerHTML = '等待 Qoder 授权……如果没有自动打开，请<a href="' + escapeHTML(body.url) + '" target="_blank" rel="noopener">点击此处授权</a>。'; const state = body.state; pollTimer = setInterval(async () => { try { const res = await api('/get-auth-status?state=' + encodeURIComponent(state)); if (res.status === 'ok') { clearInterval(pollTimer); pollTimer = null; status('登录成功，账号已保存。'); load(); } else if (res.status === 'error') { clearInterval(pollTimer); pollTimer = null; status('登录失败：' + (res.error || '未知错误')); } } catch (error) { clearInterval(pollTimer); pollTimer = null; status(error.message); } }, 2500); } catch (error) { status(error.message); } };
     function escapeHTML(value) { return String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character])); }
     updateKeyUI();
     load();

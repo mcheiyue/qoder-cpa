@@ -113,17 +113,24 @@ func (s authService) start(ctx context.Context, raw []byte) (pluginapi.AuthLogin
 		return pluginapi.AuthLoginStartResponse{}, err
 	}
 	cfg := s.oauthConfig
+	region := ""
 	if regionIsCN(req.Metadata) {
 		cfg = s.oauthConfigCN
+		region = "cn"
 	}
 	login, err := qoderauth.DeviceLogin(ctx, qoderauth.DeviceLoginRequest{Config: cfg, Client: client})
 	if err != nil {
 		return pluginapi.AuthLoginStartResponse{}, err
 	}
-	return pluginapi.AuthLoginStartResponse{
+	resp := pluginapi.AuthLoginStartResponse{
 		Provider: qoderauth.Provider, URL: login.VerifyURL,
 		State: string(login.Transaction.ID), ExpiresAt: login.ExpiresAt,
-	}, nil
+	}
+	// 回填 region：宿主把它存入 OAuth session，poll 时原样带回，保证轮询与 start 同域。
+	if region != "" {
+		resp.Metadata = map[string]any{"region": region}
+	}
+	return resp, nil
 }
 
 func (s authService) poll(ctx context.Context, raw []byte) (pluginapi.AuthLoginPollResponse, error) {
