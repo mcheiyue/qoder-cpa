@@ -22,6 +22,8 @@ func handleMethod(method string, raw []byte) ([]byte, error) {
 		return okEnvelope(managementRegister())
 	case pluginabi.MethodManagementHandle:
 		return managementHandle(raw)
+	case pluginabi.MethodSchedulerPick:
+		return handleSchedulerMethod(method, raw)
 	case pluginabi.MethodAuthIdentifier, pluginabi.MethodAuthParse,
 		pluginabi.MethodAuthLoginStart, pluginabi.MethodAuthLoginPoll,
 		pluginabi.MethodAuthRefresh:

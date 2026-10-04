@@ -235,6 +235,9 @@ func (s *managementService) accounts(ctx context.Context) (pluginapi.ManagementR
 					if s.fetchQuota != nil && storage.AccessToken != "" {
 						quota, quotaErr := s.fetchQuota(ctxOrBackground(ctx), storage.ToCredential())
 						applyManagementQuota(&account, quota, quotaErr)
+						if quotaErr == nil && quota != nil {
+							noteQuotaSnapshot(file.ID, quota.Remaining, quota.Exhausted)
+						}
 					}
 				}
 			}
