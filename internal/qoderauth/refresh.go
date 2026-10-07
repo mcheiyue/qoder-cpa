@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -113,9 +114,39 @@ func Refresh(ctx context.Context, req RefreshRequest) (*RefreshResponse, error) 
 		return nil, errors.New("qoderauth: empty client ID")
 	}
 
-	return sf.do(string(AuthIDForProfile(req.Cred.UserID, req.Cred.Profile)), func() (*RefreshResponse, error) {
+	resp, err := sf.do(string(AuthIDForProfile(req.Cred.UserID, req.Cred.Profile)), func() (*RefreshResponse, error) {
 		return doRefresh(ctx, req)
 	})
+	if err != nil {
+		return nil, sanitizeRefreshError(err, req.Cred)
+	}
+	return resp, nil
+}
+
+// sanitizeRefreshError scrubs credential material from upstream-provided
+// error text (e.g. error_description echoing tokens) while preserving the
+// *RefreshError type and its Unwrap chain (ErrMissingRefreshToken).
+func sanitizeRefreshError(err error, cred Credential) error {
+	var rerr *RefreshError
+	if !errors.As(err, &rerr) {
+		return err
+	}
+	reason := scrubSecrets(rerr.Reason, cred)
+	if reason == rerr.Reason {
+		return err
+	}
+	return &RefreshError{Reason: reason}
+}
+
+// scrubSecrets replaces credential secrets longer than 4 chars with "***".
+// Short/empty values are skipped to avoid mangling unrelated text.
+func scrubSecrets(s string, cred Credential) string {
+	for _, secret := range []string{cred.AccessToken, cred.RefreshToken, cred.RuntimeKey} {
+		if len(secret) > 4 {
+			s = strings.ReplaceAll(s, secret, "***")
+		}
+	}
+	return s
 }
 
 func doRefresh(ctx context.Context, req RefreshRequest) (*RefreshResponse, error) {

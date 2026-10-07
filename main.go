@@ -24,6 +24,13 @@ func handleMethod(method string, raw []byte) ([]byte, error) {
 		return managementHandle(raw)
 	case pluginabi.MethodSchedulerPick:
 		return handleSchedulerMethod(method, raw)
+	case pluginabi.MethodQuotaIdentifier, pluginabi.MethodQuotaDescribe,
+		pluginabi.MethodQuotaFetch, pluginabi.MethodQuotaReset:
+		return handleQuotaMethod(method, raw)
+	// Usage record pushed by host after executions; executor-exit credit/tokens
+	// reporting rides the F6 aggregateUsage payload (host parses it automatically).
+	case pluginabi.MethodUsageHandle:
+		return notImplemented(method)
 	case pluginabi.MethodAuthIdentifier, pluginabi.MethodAuthParse,
 		pluginabi.MethodAuthLoginStart, pluginabi.MethodAuthLoginPoll,
 		pluginabi.MethodAuthRefresh:
