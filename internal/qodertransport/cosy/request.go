@@ -30,6 +30,9 @@ type Parameters struct {
 	ParallelToolCalls *bool           `json:"parallel_tool_calls,omitempty"`
 	EnableThinking    *bool           `json:"enable_thinking,omitempty"`
 	ContextLength     *int            `json:"context_length,omitempty"`
+	// ResponseFormat is the client's structured-output request (json_object /
+	// json_schema), passed through raw; upstream validates shape (Orchids e92b35c2).
+	ResponseFormat json.RawMessage `json:"response_format,omitempty"`
 }
 
 // BuildRequestInput is the caller-supplied request parameters.

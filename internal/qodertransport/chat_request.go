@@ -33,6 +33,7 @@ type chatPayload struct {
 	ReasoningEffort     *string           `json:"reasoning_effort"`
 	MaxCompletionTokens *int              `json:"max_completion_tokens"`
 	ParallelToolCalls   *bool             `json:"parallel_tool_calls"`
+	ResponseFormat      json.RawMessage   `json:"response_format"`
 	IsReasoning         bool              `json:"-"`
 	MaxInputTokens      int               `json:"-"`
 }
@@ -164,11 +165,13 @@ func toCosyRequest(payload chatPayload, req StreamRequest) (cosy.BuildRequestInp
 		effort != "" ||
 		len(payload.ToolChoice) > 0 ||
 		payload.ParallelToolCalls != nil ||
+		len(payload.ResponseFormat) > 0 ||
 		enableThinking ||
 		contextLength > 0 {
 		p := cosy.Parameters{
 			ToolChoice:        payload.ToolChoice,
 			ParallelToolCalls: payload.ParallelToolCalls,
+			ResponseFormat:    payload.ResponseFormat,
 		}
 		if payload.MaxCompletionTokens != nil {
 			p.MaxTokens = payload.MaxCompletionTokens
