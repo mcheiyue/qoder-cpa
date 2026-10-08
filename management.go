@@ -162,10 +162,16 @@ func (s *managementService) models(ctx context.Context) (pluginapi.ManagementRes
 		return pluginapi.ManagementResponse{}, fmt.Errorf("decode auth list: %w", err)
 	}
 	merged := make(map[string]managementModel)
+	seenAuth := make(map[string]bool)
 	for _, file := range result.Files {
 		if !strings.EqualFold(file.Provider, qoderauth.Provider) && !strings.EqualFold(file.Type, qoderauth.Provider) || file.AuthIndex == "" {
 			continue
 		}
+		// 同一文件双注册时只拉取一次上游（auth_index 去重，与 accounts 同因）。
+		if seenAuth[file.AuthIndex] {
+			continue
+		}
+		seenAuth[file.AuthIndex] = true
 		rawAuth, getErr := s.hostCall(pluginabi.MethodHostAuthGet, pluginapi.HostAuthGetRequest{AuthIndex: file.AuthIndex})
 		if getErr != nil {
 			continue
@@ -198,51 +204,4 @@ func (s *managementService) models(ctx context.Context) (pluginapi.ManagementRes
 	}
 	sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
 	return jsonManagementResponse(http.StatusOK, managementModelsResponse{Models: models})
-}
-
-func (s *managementService) accounts(ctx context.Context) (pluginapi.ManagementResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	raw, err := s.hostCall(pluginabi.MethodHostAuthList, nil)
-	if err != nil {
-		return pluginapi.ManagementResponse{}, err
-	}
-	var result struct {
-		Files []pluginapi.HostAuthFileEntry `json:"files"`
-	}
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return pluginapi.ManagementResponse{}, fmt.Errorf("decode auth list: %w", err)
-	}
-	accounts := make([]managementAccount, 0, len(result.Files))
-	for _, file := range result.Files {
-		if !strings.EqualFold(file.Provider, qoderauth.Provider) && !strings.EqualFold(file.Type, qoderauth.Provider) {
-			continue
-		}
-		profile := qoderauth.TransportProfileCosyAPI2
-		account := managementAccount{
-			AuthIndex: file.AuthIndex, Name: file.Name, Label: file.Label,
-			Email: file.Email, Profile: string(profile), Status: file.Status, Disabled: file.Disabled,
-		}
-		if file.AuthIndex != "" {
-			if rawAuth, getErr := s.hostCall(pluginabi.MethodHostAuthGet, pluginapi.HostAuthGetRequest{AuthIndex: file.AuthIndex}); getErr == nil {
-				var auth pluginapi.HostAuthGetResponse
-				var storage qoderauth.StorageJSON
-				if json.Unmarshal(rawAuth, &auth) == nil && json.Unmarshal(auth.JSON, &storage) == nil {
-					if qoderauth.IsValidProfile(storage.Profile) {
-						account.Profile = string(storage.Profile)
-					}
-					account.NeedsAuth = storage.MachineID == ""
-					if s.fetchQuota != nil && storage.AccessToken != "" {
-						quota, quotaErr := s.fetchQuota(ctxOrBackground(ctx), storage.ToCredential())
-						applyManagementQuota(&account, quota, quotaErr)
-						if quotaErr == nil && quota != nil {
-							noteQuotaSnapshot(file.ID, quota.Remaining, quota.Exhausted)
-						}
-					}
-				}
-			}
-		}
-		accounts = append(accounts, account)
-	}
-	return jsonManagementResponse(http.StatusOK, managementAccountsResponse{Accounts: accounts})
 }
