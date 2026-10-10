@@ -74,6 +74,8 @@ type managementAccount struct {
 	UpgradeURL    string     `json:"upgrade_url,omitempty"`
 	QuotaError    string     `json:"quota_error,omitempty"`
 	QuotaSyncedAt *time.Time `json:"quota_synced_at,omitempty"`
+	// Priority 是宿主路由优先级（数值越大越优先，缺省 0）；不带 omitempty，0 必须回显。
+	Priority int `json:"priority"`
 }
 
 type profileUpdateRequest struct {

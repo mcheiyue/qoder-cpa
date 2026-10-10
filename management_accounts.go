@@ -60,7 +60,7 @@ func (s *managementService) accounts(ctx context.Context) (pluginapi.ManagementR
 			accounts = append(accounts, managementAccount{
 				AuthIndex: file.AuthIndex, Name: file.Name, Label: file.Label,
 				Email: file.Email, Profile: string(qoderauth.TransportProfileCosyAPI2),
-				Status: file.Status, Disabled: file.Disabled,
+				Status: file.Status, Disabled: file.Disabled, Priority: file.Priority,
 			})
 		}
 		if file.AuthIndex != "" {

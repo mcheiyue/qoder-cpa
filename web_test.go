@@ -28,11 +28,30 @@ func TestEmbeddedWebUISendsManagementKey(t *testing.T) {
 		"action_type === 'CLAIM_BENEFIT'",
 		"id=\"login-region\"",
 		"region=cn",
-		"国内站",
 		"国际站",
+		"国内站",
 	} {
 		if !strings.Contains(html, required) {
 			t.Fatalf("embedded web UI missing %q", required)
+		}
+	}
+}
+
+// TestEmbeddedWebUIPriorityEditor 锁优先级编辑接线：9 列表头、行内
+// 输入+保存、写路径 PATCH /auth-files/fields（name=priority）。
+// 串行单行保存，不并发写 auth 目录。
+func TestEmbeddedWebUIPriorityEditor(t *testing.T) {
+	html := string(qoderWebUI)
+	for _, required := range []string{
+		"优先级",
+		"auth-files/fields",
+		"savePriority",
+		"method:'PATCH'",
+		"数字越大越优先",
+		"colspan=\"9\"",
+	} {
+		if !strings.Contains(html, required) {
+			t.Errorf("embedded web UI missing %q", required)
 		}
 	}
 }

@@ -39,7 +39,7 @@ func TestManagementAccountsRedactsCredentialMaterial(t *testing.T) {
 	if response.StatusCode != http.StatusOK || string(response.Body) == "" {
 		t.Fatalf("response=%+v", response)
 	}
-	if string(response.Body) != `{"accounts":[{"auth_index":"qoder-1","name":"qoder.json","label":"Qoder","email":"a@qoder.test","transport_profile":"bearer-openai"}]}` {
+	if string(response.Body) != `{"accounts":[{"auth_index":"qoder-1","name":"qoder.json","label":"Qoder","email":"a@qoder.test","transport_profile":"bearer-openai","priority":0}]}` {
 		t.Fatalf("body=%s", response.Body)
 	}
 	for _, secret := range []string{"access_token", "refresh_token", "runtime_key"} {
