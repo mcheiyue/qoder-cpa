@@ -37,6 +37,27 @@ func TestEmbeddedWebUISendsManagementKey(t *testing.T) {
 	}
 }
 
+// TestEmbeddedWebUIModelsRateColumn 锁模型目录 A 版契约：调用 ID 在前、展示名次之、
+// 「倍率」列殿后；免费档绿标、促销角标透出。「来源账号」列已删除——同一上游目录被 8 个
+// 账号各复制一份，该列只是噪音，且合并去重后它已无唯一值。
+func TestEmbeddedWebUIModelsRateColumn(t *testing.T) {
+	html := string(qoderWebUI)
+	for _, required := range []string{
+		"<th>调用 ID</th><th>展示名</th><th>倍率</th>",
+		"function rateCell",
+		"免费",
+		"model.is_free",
+		"model.badge",
+	} {
+		if !strings.Contains(html, required) {
+			t.Errorf("embedded web UI missing %q", required)
+		}
+	}
+	if strings.Contains(html, "来源账号") {
+		t.Error("模型目录的「来源账号」列应已删除")
+	}
+}
+
 // TestEmbeddedWebUIPriorityEditor 锁优先级编辑接线：9 列表头、行内
 // 输入+保存、写路径 PATCH /auth-files/fields（name=priority）。
 // 串行单行保存，不并发写 auth 目录。

@@ -195,3 +195,24 @@ func TestParseCatalogMissingMetadataDefaultsFalse(t *testing.T) {
 		t.Errorf("missing metadata should default to false/0: %+v", models[0])
 	}
 }
+
+// TestParseCatalogPreservesPriceFactorAndPromotion 锁倍率解析契约：上游每个模型节点都带
+// price_factor（0.0 是免费档的**有效取值**而非「缺省」，不能用零值判断缺省），促销角标是
+// {en,zh} 双语对象——中文面板取 zh。两者任一被丢弃，面板「倍率」列都会静默失真。
+func TestParseCatalogPreservesPriceFactorAndPromotion(t *testing.T) {
+	models, err := parseCatalog([]byte(`{"data":{"chat":[{"key":"qfmodel","name":"Qwen3.8-Flash","price_factor":0.0,"is_free":true,"original_price_factor":0.1,"promotion":{"active":false,"badge":{"en":"Off-Peak 80% off","zh":"错峰2折"},"discount_factor":0.2}},{"key":"smodel","name":"Sonus","price_factor":8.0,"is_free":false}]}}`))
+	if err != nil {
+		t.Fatalf("parseCatalog: %v", err)
+	}
+	if len(models) != 2 {
+		t.Fatalf("models=%+v, want 2", models)
+	}
+	free := models[0]
+	if free.ID != "qfmodel" || free.PriceFactor != 0 || !free.IsFree || free.PromotionBadge != "错峰2折" {
+		t.Errorf("free model: %+v", free)
+	}
+	paid := models[1]
+	if paid.ID != "smodel" || paid.PriceFactor != 8 || paid.IsFree || paid.PromotionBadge != "" {
+		t.Errorf("paid model: %+v", paid)
+	}
+}

@@ -21,17 +21,24 @@ type Model struct {
 	Name           string `json:"name"`
 	IsReasoning    bool   `json:"is_reasoning"`
 	MaxInputTokens int    `json:"max_input_tokens"`
+	// PriceFactor 是上游倍率，0 是免费档的有效取值而非「缺省」，不能用零值表示未标注。
+	PriceFactor float64 `json:"price_factor"`
+	IsFree      bool    `json:"is_free"`
+	// PromotionBadge 是上游促销角标（如「错峰2折」），空串表示该模型无促销。
+	PromotionBadge string `json:"promotion_badge,omitempty"`
 }
 
 func (m *Model) UnmarshalJSON(raw []byte) error {
 	var wire struct {
-		ID               string `json:"id"`
-		Key              string `json:"key"`
-		Name             string `json:"name"`
-		DisplayName      string `json:"display_name"`
-		DisplayNameCamel string `json:"displayName"`
-		IsReasoning      bool   `json:"is_reasoning"`
-		MaxInputTokens   int    `json:"max_input_tokens"`
+		ID               string  `json:"id"`
+		Key              string  `json:"key"`
+		Name             string  `json:"name"`
+		DisplayName      string  `json:"display_name"`
+		DisplayNameCamel string  `json:"displayName"`
+		IsReasoning      bool    `json:"is_reasoning"`
+		MaxInputTokens   int     `json:"max_input_tokens"`
+		PriceFactor      float64 `json:"price_factor"`
+		IsFree           bool    `json:"is_free"`
 	}
 	if err := json.Unmarshal(raw, &wire); err != nil {
 		return err
@@ -40,6 +47,9 @@ func (m *Model) UnmarshalJSON(raw []byte) error {
 	m.Name = modelDisplayName(m.ID, wire.DisplayName, wire.DisplayNameCamel, wire.Name)
 	m.IsReasoning = wire.IsReasoning
 	m.MaxInputTokens = wire.MaxInputTokens
+	m.PriceFactor = wire.PriceFactor
+	m.IsFree = wire.IsFree
+	// 促销角标只存在于签名目录（本路径的 /v1/models 响应没有 promotion 结构）。
 	return nil
 }
 
@@ -159,6 +169,9 @@ func collectModels(value any) []Model {
 						Name:           modelDisplayName(id, stringValue(typed["display_name"]), stringValue(typed["displayName"]), stringValue(typed["name"])),
 						IsReasoning:    boolValue(typed["is_reasoning"]),
 						MaxInputTokens: intValue(typed["max_input_tokens"]),
+						PriceFactor:    floatValue(typed["price_factor"]),
+						IsFree:         boolValue(typed["is_free"]),
+						PromotionBadge: promotionBadge(typed["promotion"]),
 					})
 				}
 			}
@@ -212,4 +225,28 @@ func intValue(value any) int {
 		return int(n)
 	}
 	return 0
+}
+
+func floatValue(value any) float64 {
+	f, _ := value.(float64)
+	return f
+}
+
+// promotionBadge 取促销角标：上游给的是 {en,zh} 双语对象，面板是中文界面故优先 zh。
+func promotionBadge(value any) string {
+	promo, ok := value.(map[string]any)
+	if !ok {
+		return ""
+	}
+	switch badge := promo["badge"].(type) {
+	case string:
+		return strings.TrimSpace(badge)
+	case map[string]any:
+		for _, key := range []string{"zh", "en"} {
+			if text := strings.TrimSpace(stringValue(badge[key])); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
 }

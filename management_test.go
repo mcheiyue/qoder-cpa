@@ -168,7 +168,10 @@ func TestManagementQuotaRefreshReturnsSnapshotAndErrorState(t *testing.T) {
 	}
 }
 
-func TestManagementModelsUsesDisplayNameWithoutChangingID(t *testing.T) {
+// TestManagementModelsExposesDisplayNameAndRate 锁 models 端点契约：展示名进 display_name
+// 而**不改写 id**（宿主 alias 依赖原始调用 ID）；倍率必须透出，且 0.0（免费档）必须真的
+// 序列化出来——给 rate 加 omitempty 会让免费档在面板显示成「无数据」。
+func TestManagementModelsExposesDisplayNameAndRate(t *testing.T) {
 	previous := defaultManagementService
 	t.Cleanup(func() { defaultManagementService = previous })
 	defaultManagementService = &managementService{
@@ -186,7 +189,10 @@ func TestManagementModelsUsesDisplayNameWithoutChangingID(t *testing.T) {
 			}
 		},
 		fetchModels: func(context.Context, qoderauth.Credential) ([]qodercontrol.Model, error) {
-			return []qodercontrol.Model{{ID: "qfmodel", Name: "Qwen3.8-Flash"}, {ID: "qmodel_38max", Name: "Qwen3.8 Max"}}, nil
+			return []qodercontrol.Model{
+				{ID: "qfmodel", Name: "Qwen3.8-Flash", PriceFactor: 0, IsFree: true, PromotionBadge: "错峰2折"},
+				{ID: "qmodel_38max", Name: "Qwen3.8 Max", PriceFactor: 8},
+			}, nil
 		},
 	}
 	response, err := (managementHandler{kind: "models"}).HandleManagement(context.Background(), pluginapi.ManagementRequest{})
@@ -206,6 +212,17 @@ func TestManagementModelsUsesDisplayNameWithoutChangingID(t *testing.T) {
 	}
 	if byID["qoder/Qwen3.8-Flash"].DisplayName != "Qwen3.8-Flash" || byID["qoder/Qwen3.8 Max"].DisplayName != "Qwen3.8 Max" {
 		t.Fatalf("models=%+v", body.Models)
+	}
+	free := byID["qoder/Qwen3.8-Flash"]
+	if free.Rate != 0 || !free.IsFree || free.Badge != "错峰2折" {
+		t.Errorf("free model: %+v", free)
+	}
+	paid := byID["qoder/Qwen3.8 Max"]
+	if paid.Rate != 8 || paid.IsFree || paid.Badge != "" {
+		t.Errorf("paid model: %+v", paid)
+	}
+	if !strings.Contains(string(response.Body), `"rate":0`) {
+		t.Errorf("免费档 rate 0 必须序列化: %s", response.Body)
 	}
 }
 

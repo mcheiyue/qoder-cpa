@@ -49,6 +49,10 @@ type managementModel struct {
 	AuthIndex   string `json:"auth_index"`
 	ID          string `json:"id"`
 	DisplayName string `json:"display_name"`
+	// Rate 是上游倍率；0 是免费档的有效取值，故不带 omitempty 以保证回显。
+	Rate   float64 `json:"rate"`
+	IsFree bool    `json:"is_free,omitempty"`
+	Badge  string  `json:"badge,omitempty"`
 }
 
 type managementAccount struct {
@@ -197,7 +201,10 @@ func (s *managementService) models(ctx context.Context) (pluginapi.ManagementRes
 			if _, exists := merged[key]; exists {
 				continue
 			}
-			merged[key] = managementModel{AuthIndex: file.AuthIndex, ID: key, DisplayName: name}
+			merged[key] = managementModel{
+				AuthIndex: file.AuthIndex, ID: key, DisplayName: name,
+				Rate: model.PriceFactor, IsFree: model.IsFree, Badge: model.PromotionBadge,
+			}
 		}
 	}
 	models := make([]managementModel, 0, len(merged))
