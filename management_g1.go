@@ -187,7 +187,7 @@ func (s *managementService) fetchActivity(ctx context.Context, raw []byte) (plug
 }
 
 func fetchManagementCampaigns(ctx context.Context, cred qoderauth.Credential) (*qodercontrol.CampaignsResult, error) {
-	client, err := qodercontrol.NewClient(nil, qodercontrol.DefaultConfig())
+	client, err := qodercontrol.NewClient(nil, controlConfigForProfile(cred.Profile))
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func fetchManagementCampaigns(ctx context.Context, cred qoderauth.Credential) (*
 }
 
 func claimManagementCampaign(ctx context.Context, cred qoderauth.Credential, campaign qodercontrol.Campaign) (*qodercontrol.ClaimResult, error) {
-	client, err := qodercontrol.NewClient(nil, qodercontrol.DefaultConfig())
+	client, err := qodercontrol.NewClient(nil, controlConfigForProfile(cred.Profile))
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func claimManagementCampaign(ctx context.Context, cred qoderauth.Credential, cam
 }
 
 func fetchManagementCreditsSummary(ctx context.Context, cred qoderauth.Credential) (*qodercontrol.CreditsSummary, error) {
-	client, err := qodercontrol.NewClient(nil, qodercontrol.DefaultConfig())
+	client, err := qodercontrol.NewClient(nil, controlConfigForProfile(cred.Profile))
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +211,7 @@ func fetchManagementCreditsSummary(ctx context.Context, cred qoderauth.Credentia
 }
 
 func fetchManagementSeatActivity(ctx context.Context, cred qoderauth.Credential) (*qodercontrol.SeatActivity, error) {
-	client, err := qodercontrol.NewClient(nil, qodercontrol.DefaultConfig())
+	client, err := qodercontrol.NewClient(nil, controlConfigForProfile(cred.Profile))
 	if err != nil {
 		return nil, err
 	}

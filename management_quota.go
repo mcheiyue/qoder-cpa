@@ -50,8 +50,17 @@ func (s *managementService) refreshQuota(ctx context.Context, raw []byte) (plugi
 	return jsonManagementResponse(http.StatusOK, response)
 }
 
+// controlConfigForProfile 按凭证 transport profile 选控制面基址：
+// cosy-cn 走 CN 站，其余走国际站（与 models.go 的端点选择同源）。
+func controlConfigForProfile(profile qoderauth.TransportProfile) qodercontrol.Config {
+	if profile == qoderauth.TransportProfileCosyCN {
+		return qodercontrol.DefaultConfigCN()
+	}
+	return qodercontrol.DefaultConfig()
+}
+
 func fetchManagementQuota(ctx context.Context, cred qoderauth.Credential) (*qodercontrol.Quota, error) {
-	client, err := qodercontrol.NewClient(nil, qodercontrol.DefaultConfig())
+	client, err := qodercontrol.NewClient(nil, controlConfigForProfile(cred.Profile))
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +68,7 @@ func fetchManagementQuota(ctx context.Context, cred qoderauth.Credential) (*qode
 }
 
 func fetchManagementModels(ctx context.Context, cred qoderauth.Credential) ([]qodercontrol.Model, error) {
-	client, err := qodercontrol.NewClient(nil, qodercontrol.DefaultConfig())
+	client, err := qodercontrol.NewClient(nil, controlConfigForProfile(cred.Profile))
 	if err != nil {
 		return nil, err
 	}
