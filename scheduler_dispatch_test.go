@@ -32,7 +32,7 @@ func TestHandleSchedulerMethod_RoundTrip(t *testing.T) {
 		Provider:   "qoder",
 		Providers:  []string{"qoder"},
 		Model:      "qwen3.8-plus",
-		Candidates: []pluginapi.SchedulerAuthCandidate{{ID: "auth-1", Priority: 10}},
+		Candidates: []pluginapi.SchedulerAuthCandidate{{ID: "auth-1", Provider: pluginID, Priority: 10}},
 	}
 	raw, err := json.Marshal(req)
 	if err != nil {

@@ -54,7 +54,7 @@ func TestSchedulerPick_QueueCooldownExclusion(t *testing.T) {
 	req := pluginapi.SchedulerPickRequest{
 		Model: "qwen3.8-plus",
 		Candidates: []pluginapi.SchedulerAuthCandidate{
-			{ID: "auth-1", Priority: 10}, {ID: "auth-2", Priority: 20},
+			{ID: "auth-1", Provider: pluginID, Priority: 10}, {ID: "auth-2", Provider: pluginID, Priority: 20},
 		},
 	}
 	resp := schedulerPick(req)
@@ -88,7 +88,7 @@ func TestSchedulerPick_ExhaustedExclusion(t *testing.T) {
 	req := pluginapi.SchedulerPickRequest{
 		Model: "qwen3.8-plus",
 		Candidates: []pluginapi.SchedulerAuthCandidate{
-			{ID: "auth-1", Priority: 10}, {ID: "auth-2", Priority: 20},
+			{ID: "auth-1", Provider: pluginID, Priority: 10}, {ID: "auth-2", Provider: pluginID, Priority: 20},
 		},
 	}
 	resp := schedulerPick(req)
@@ -106,7 +106,7 @@ func TestSchedulerPick_ExhaustedExclusion(t *testing.T) {
 	}
 	resp = schedulerPick(pluginapi.SchedulerPickRequest{
 		Model:      "qwen3.8-plus",
-		Candidates: []pluginapi.SchedulerAuthCandidate{{ID: "auth-1"}},
+		Candidates: []pluginapi.SchedulerAuthCandidate{{ID: "auth-1", Provider: pluginID}},
 	})
 	if !resp.Handled || resp.AuthID != "auth-1" {
 		t.Fatalf("resp = %+v, want auth-1 after snapshot TTL", resp)
@@ -119,7 +119,7 @@ func TestSchedulerPick_Sticky(t *testing.T) {
 	// No derivable key → plain pick, no sticky side effects.
 	plain := schedulerPick(pluginapi.SchedulerPickRequest{
 		Model:      "qwen3.8-plus",
-		Candidates: []pluginapi.SchedulerAuthCandidate{{ID: "auth-1"}},
+		Candidates: []pluginapi.SchedulerAuthCandidate{{ID: "auth-1", Provider: pluginID}},
 	})
 	if !plain.Handled || plain.AuthID != "auth-1" {
 		t.Fatalf("plain pick: %+v", plain)
@@ -128,7 +128,7 @@ func TestSchedulerPick_Sticky(t *testing.T) {
 		Model:   "qwen3.8-plus",
 		Options: pluginapi.SchedulerOptions{Headers: map[string][]string{"X-Conversation-ID": {"conv-1"}}},
 		Candidates: []pluginapi.SchedulerAuthCandidate{
-			{ID: "auth-1", Priority: 10}, {ID: "auth-2", Priority: 20},
+			{ID: "auth-1", Provider: pluginID, Priority: 10}, {ID: "auth-2", Provider: pluginID, Priority: 20},
 		},
 	}
 	resp := schedulerPick(req)
@@ -156,7 +156,7 @@ func TestSchedulerPick_QuotaWeighted(t *testing.T) {
 	req := pluginapi.SchedulerPickRequest{
 		Model: "qwen3.8-plus",
 		Candidates: []pluginapi.SchedulerAuthCandidate{
-			{ID: "auth-1", Priority: 10}, {ID: "auth-2", Priority: 20},
+			{ID: "auth-1", Provider: pluginID, Priority: 10}, {ID: "auth-2", Provider: pluginID, Priority: 20},
 		},
 	}
 	counts := map[string]int{}
@@ -173,16 +173,19 @@ func TestSchedulerPick_QuotaWeighted(t *testing.T) {
 }
 
 // (h) no quota snapshot → priority fallback picks the highest-priority candidate.
+// 预期行为变更（2026-10-17，对齐宿主语义）：宿主 highestPriorityAuths 用
+// `priority > bestPriority`，数值越大越优先。原断言（priority 10 胜过 20）锁的是
+// 反方向的旧实现，已随排序方向修正一并更新。
 func TestSchedulerPick_NoSnapshotPriorityFallback(t *testing.T) {
 	testSchedulerState(t)
 	resp := schedulerPick(pluginapi.SchedulerPickRequest{
 		Model: "qwen3.8-plus",
 		Candidates: []pluginapi.SchedulerAuthCandidate{
-			{ID: "auth-1", Priority: 10}, {ID: "auth-2", Priority: 20},
+			{ID: "auth-1", Provider: pluginID, Priority: 10}, {ID: "auth-2", Provider: pluginID, Priority: 20},
 		},
 	})
-	if !resp.Handled || resp.AuthID != "auth-1" {
-		t.Fatalf("resp = %+v, want auth-1 (priority 10 wins)", resp)
+	if !resp.Handled || resp.AuthID != "auth-2" {
+		t.Fatalf("resp = %+v, want auth-2 (priority 20 wins)", resp)
 	}
 }
 
@@ -193,7 +196,7 @@ func TestSchedulerPick_Concurrent(t *testing.T) {
 	req := pluginapi.SchedulerPickRequest{
 		Model: "qwen3.8-plus",
 		Candidates: []pluginapi.SchedulerAuthCandidate{
-			{ID: "auth-1", Priority: 10}, {ID: "auth-2", Priority: 20}, {ID: "auth-3", Priority: 30},
+			{ID: "auth-1", Provider: pluginID, Priority: 10}, {ID: "auth-2", Provider: pluginID, Priority: 20}, {ID: "auth-3", Provider: pluginID, Priority: 30},
 		},
 	}
 	var wg sync.WaitGroup
