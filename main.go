@@ -17,6 +17,8 @@ func main() {}
 func handleMethod(method string, raw []byte) ([]byte, error) {
 	switch method {
 	case pluginabi.MethodPluginRegister, pluginabi.MethodPluginReconfigure:
+		// 注册即启动每日 credits 领取循环（幂等；goroutine 自延迟 2s）。
+		startCampaignsOps()
 		return okEnvelope(registration())
 	case pluginabi.MethodManagementRegister:
 		return okEnvelope(managementRegister())
