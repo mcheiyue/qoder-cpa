@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -103,22 +104,27 @@ func tail(s string) string {
 	return s
 }
 
-// startCampaignsOps 启动每日领取循环（幂等）。hour 取 10 后 1 小时错开上游刷新点。
+// startCampaignsOps 启动每日领取循环（幂等）。每次重算触发时刻并抽新的抖动分钟。
 func startCampaignsOps() {
 	opsOnce.Do(func() {
 		go func() {
 			time.Sleep(2 * time.Second)
 			for {
-				now := defaultCampaignsClaimer.now()
-				next := time.Date(now.Year(), now.Month(), now.Day(), opsClaimHour, 5, 0, 0, now.Location())
-				if !next.After(now) {
-					next = next.Add(24 * time.Hour)
-				}
-				time.Sleep(next.Sub(now))
+				next := nextClaimAt(defaultCampaignsClaimer.now(), rand.Intn(30))
+				time.Sleep(time.Until(next))
 				defaultCampaignsClaimer.claimAll(context.Background())
 			}
 		}()
 	})
+}
+
+// nextClaimAt 返回下一个领取时刻：当天 opsClaimHour 点 + jitter 分钟；已过点则滚到明日。
+func nextClaimAt(now time.Time, jitter int) time.Time {
+	at := time.Date(now.Year(), now.Month(), now.Day(), opsClaimHour, jitter, 0, 0, now.Location())
+	if !at.After(now) {
+		at = at.Add(24 * time.Hour)
+	}
+	return at
 }
 
 const opsClaimHour = 10

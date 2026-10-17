@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/mcheiyue/qoder-cpa/internal/qoderauth"
 	"github.com/mcheiyue/qoder-cpa/internal/qodercontrol"
@@ -35,6 +36,22 @@ func claimHostCall(indexes ...string) func(string, any) (json.RawMessage, error)
 	}
 }
 
+// 锁：领取时刻必须带抖动——固定分钟位（如每天 10:05）在多账号下是明显的脚本特征。
+// 同时锁住跨日滚动：今天已过点必须滚到明日，否则会当天连跑两次。
+func TestNextClaimAt(t *testing.T) {
+	base := time.Date(2026, 10, 18, 9, 0, 0, 0, time.UTC)
+	for jitter := 0; jitter < 30; jitter++ {
+		at := nextClaimAt(base, jitter)
+		if at.Hour() != opsClaimHour || at.Minute() != jitter || at.Day() != 18 {
+			t.Fatalf("jitter=%d got %v, want 2026-10-18 %02d:%02d", jitter, at, opsClaimHour, jitter)
+		}
+	}
+	after := time.Date(2026, 10, 18, 11, 0, 0, 0, time.UTC)
+	if at := nextClaimAt(after, 7); at.Day() != 19 {
+		t.Fatalf("after-window must roll to next day, got %v", at)
+	}
+}
+
 // 锁：只对 CLAIMABLE 的 CLAIM_BENEFIT 活动发写请求——已领（CLAIMED）再领会打上游
 // 重复领取端点，非 CLAIM_BENEFIT 类型（如签到类）走了会 400。
 func TestClaimAllCampaigns_OnlyClaimable(t *testing.T) {
@@ -61,6 +78,8 @@ func TestClaimAllCampaigns_OnlyClaimable(t *testing.T) {
 	}
 }
 
+// 锁：单账号取活动失败不得中断整轮——多账号场景下必须继续处理其余账号，
+// 否则一个坏 token 会让所有 CN 号当天都领不到。
 // 锁：单账号取活动失败不得中断整轮——多账号场景下必须继续处理其余账号，
 // 否则一个坏 token 会让所有 CN 号当天都领不到。
 func TestClaimAllCampaigns_FetchErrorDoesNotAbort(t *testing.T) {
