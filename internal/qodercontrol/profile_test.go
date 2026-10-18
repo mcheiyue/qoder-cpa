@@ -42,6 +42,29 @@ func TestFetchProfile_Success(t *testing.T) {
 	}
 }
 
+// 锁：CN 站 /api/v1/userinfo 的主键字段名是 "id"（不是 user_id/uid），
+// 且身份只有 security_mobile（email 恒为空）。只认 user_id/uid 会让国内号
+// 的 FetchProfile 恒返回 ErrMalformedResponse，手机号永远拿不到。
+func TestFetchProfile_CNStationUsesIDAndMobile(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"01a14af2-8f44-723f-ac03-0e1e200b3d5e","name":"nick9504777579","email":"","security_mobile":"18074073866","source":"sso.aliyun"}`)
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	p, err := c.FetchProfile(context.Background(), qoderauth.Credential{AccessToken: "at"})
+	if err != nil {
+		t.Fatalf("FetchProfile: %v", err)
+	}
+	if p.UserID != "01a14af2-8f44-723f-ac03-0e1e200b3d5e" {
+		t.Errorf("UserID=%q", p.UserID)
+	}
+	if p.Mobile != "18074073866" {
+		t.Errorf("Mobile=%q, want 18074073866", p.Mobile)
+	}
+}
+
 func TestFetchProfile_SuccessWithQoderUID(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
