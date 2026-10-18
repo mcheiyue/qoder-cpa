@@ -49,35 +49,41 @@ type managementModel struct {
 	AuthIndex   string `json:"auth_index"`
 	ID          string `json:"id"`
 	DisplayName string `json:"display_name"`
-	// Rate 是上游倍率；0 是免费档的有效取值，故不带 omitempty 以保证回显。
+	// Profile 是产出该行的凭证 transport profile。国际站与 CN 站对同一模型可能给出
+	// 不同倍率，去重必须按 profile 分区，否则先遍历的账号会独占该行并静默丢弃另一站的值。
+	Profile string `json:"profile,omitempty"`
+	// Rate 是上游倍率，0 是免费档的有效取值，故不带 omitempty 以保证回显。
 	Rate   float64 `json:"rate"`
 	IsFree bool    `json:"is_free,omitempty"`
 	Badge  string  `json:"badge,omitempty"`
 }
 
 type managementAccount struct {
-	AuthIndex     string     `json:"auth_index"`
-	Name          string     `json:"name"`
-	Label         string     `json:"label,omitempty"`
-	Email         string     `json:"email,omitempty"`
-	Profile       string     `json:"transport_profile,omitempty"`
-	Status        string     `json:"status,omitempty"`
-	Disabled      bool       `json:"disabled,omitempty"`
-	NeedsAuth     bool       `json:"needs_reauth,omitempty"`
-	PlanTier      string     `json:"plan_tier,omitempty"`
-	UserType      string     `json:"user_type,omitempty"`
-	PaidPlan      bool       `json:"paid_plan,omitempty"`
-	Remaining     float64    `json:"remaining,omitempty"`
-	Limit         float64    `json:"limit,omitempty"`
-	Used          float64    `json:"used,omitempty"`
-	AgentLimit    float64    `json:"agent_limit,omitempty"`
-	Exhausted     bool       `json:"exhausted,omitempty"`
-	Unit          string     `json:"unit,omitempty"`
-	ResetAt       *time.Time `json:"reset_at,omitempty"`
-	PeriodEnd     *time.Time `json:"period_end,omitempty"`
-	UpgradeURL    string     `json:"upgrade_url,omitempty"`
-	QuotaError    string     `json:"quota_error,omitempty"`
-	QuotaSyncedAt *time.Time `json:"quota_synced_at,omitempty"`
+	AuthIndex      string     `json:"auth_index"`
+	Name           string     `json:"name"`
+	Label          string     `json:"label,omitempty"`
+	Email          string     `json:"email,omitempty"`
+	Profile        string     `json:"transport_profile,omitempty"`
+	Status         string     `json:"status,omitempty"`
+	Disabled       bool       `json:"disabled,omitempty"`
+	NeedsAuth      bool       `json:"needs_reauth,omitempty"`
+	PlanTier       string     `json:"plan_tier,omitempty"`
+	UserType       string     `json:"user_type,omitempty"`
+	PaidPlan       bool       `json:"paid_plan,omitempty"`
+	Remaining      float64    `json:"remaining,omitempty"`
+	Limit          float64    `json:"limit,omitempty"`
+	Used           float64    `json:"used,omitempty"`
+	AddOn          float64    `json:"add_on,omitempty"`
+	AddOnRemaining float64    `json:"add_on_remaining,omitempty"`
+	AgentLimit     float64    `json:"agent_limit,omitempty"`
+	Exhausted      bool       `json:"exhausted,omitempty"`
+	Unit           string     `json:"unit,omitempty"`
+	ResetAt        *time.Time `json:"reset_at,omitempty"`
+	PeriodStart    *time.Time `json:"period_start,omitempty"`
+	PeriodEnd      *time.Time `json:"period_end,omitempty"`
+	UpgradeURL     string     `json:"upgrade_url,omitempty"`
+	QuotaError     string     `json:"quota_error,omitempty"`
+	QuotaSyncedAt  *time.Time `json:"quota_synced_at,omitempty"`
 	// Priority 是宿主路由优先级（数值越大越优先，缺省 0）；不带 omitempty，0 必须回显。
 	Priority int `json:"priority"`
 }
@@ -97,20 +103,23 @@ type managementQuotaResponse struct {
 }
 
 type managementQuota struct {
-	PlanTier      string     `json:"plan_tier,omitempty"`
-	UserType      string     `json:"user_type,omitempty"`
-	PaidPlan      bool       `json:"paid_plan,omitempty"`
-	Remaining     float64    `json:"remaining,omitempty"`
-	Limit         float64    `json:"limit,omitempty"`
-	Used          float64    `json:"used,omitempty"`
-	AgentLimit    float64    `json:"agent_limit,omitempty"`
-	Exhausted     bool       `json:"exhausted,omitempty"`
-	Unit          string     `json:"unit,omitempty"`
-	ResetAt       *time.Time `json:"reset_at,omitempty"`
-	PeriodEnd     *time.Time `json:"period_end,omitempty"`
-	UpgradeURL    string     `json:"upgrade_url,omitempty"`
-	QuotaError    string     `json:"quota_error,omitempty"`
-	QuotaSyncedAt *time.Time `json:"quota_synced_at,omitempty"`
+	PlanTier       string     `json:"plan_tier,omitempty"`
+	UserType       string     `json:"user_type,omitempty"`
+	PaidPlan       bool       `json:"paid_plan,omitempty"`
+	Remaining      float64    `json:"remaining,omitempty"`
+	Limit          float64    `json:"limit,omitempty"`
+	Used           float64    `json:"used,omitempty"`
+	AddOn          float64    `json:"add_on,omitempty"`
+	AddOnRemaining float64    `json:"add_on_remaining,omitempty"`
+	AgentLimit     float64    `json:"agent_limit,omitempty"`
+	Exhausted      bool       `json:"exhausted,omitempty"`
+	Unit           string     `json:"unit,omitempty"`
+	ResetAt        *time.Time `json:"reset_at,omitempty"`
+	PeriodStart    *time.Time `json:"period_start,omitempty"`
+	PeriodEnd      *time.Time `json:"period_end,omitempty"`
+	UpgradeURL     string     `json:"upgrade_url,omitempty"`
+	QuotaError     string     `json:"quota_error,omitempty"`
+	QuotaSyncedAt  *time.Time `json:"quota_synced_at,omitempty"`
 }
 
 func managementRegister() map[string]any {
@@ -191,6 +200,10 @@ func (s *managementService) models(ctx context.Context) (pluginapi.ManagementRes
 		if fetchErr != nil {
 			continue
 		}
+		profile := string(storage.Profile)
+		if profile == "" {
+			profile = string(qoderauth.TransportProfileCosyAPI2)
+		}
 		for _, model := range models {
 			id := strings.TrimSpace(model.ID)
 			if id == "" {
@@ -198,11 +211,12 @@ func (s *managementService) models(ctx context.Context) (pluginapi.ManagementRes
 			}
 			name := displayNameForModel(id, model.Name)
 			key := publicModelID(name)
-			if _, exists := merged[key]; exists {
+			mergeKey := profile + "\x00" + key
+			if _, exists := merged[mergeKey]; exists {
 				continue
 			}
-			merged[key] = managementModel{
-				AuthIndex: file.AuthIndex, ID: key, DisplayName: name,
+			merged[mergeKey] = managementModel{
+				AuthIndex: file.AuthIndex, ID: key, DisplayName: name, Profile: profile,
 				Rate: model.PriceFactor, IsFree: model.IsFree, Badge: model.PromotionBadge,
 			}
 		}
@@ -211,6 +225,11 @@ func (s *managementService) models(ctx context.Context) (pluginapi.ManagementRes
 	for _, model := range merged {
 		models = append(models, model)
 	}
-	sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
+	sort.Slice(models, func(i, j int) bool {
+		if models[i].ID != models[j].ID {
+			return models[i].ID < models[j].ID
+		}
+		return models[i].Profile < models[j].Profile
+	})
 	return jsonManagementResponse(http.StatusOK, managementModelsResponse{Models: models})
 }

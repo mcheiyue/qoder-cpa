@@ -14,20 +14,28 @@ import (
 
 // Quota holds account quota/subscription information.
 type Quota struct {
-	PlanTier   string    `json:"plan_tier,omitempty"`
-	UserType   string    `json:"user_type,omitempty"`
-	PaidPlan   bool      `json:"paid_plan"`
-	Limit      float64   `json:"limit"`
-	Used       float64   `json:"used"`
-	Remaining  float64   `json:"remaining"`
-	AgentLimit float64   `json:"agent_limit,omitempty"`
-	Exhausted  bool      `json:"exhausted"`
-	Unit       string    `json:"unit,omitempty"`
-	ResetAt    time.Time `json:"reset_at,omitempty"`
-	PeriodEnd  time.Time `json:"period_end,omitempty"`
-	UpgradeURL string    `json:"upgrade_url,omitempty"`
-	Error      string    `json:"error,omitempty"`
-	SyncedAt   time.Time `json:"synced_at"`
+	// Nickname/Email 来自 /api/v3/user/status；auth 文件本身不含这两个元数据，
+	// 缺了它们管理面板只能显示文件名（qoder-<sha256>.json）。仅用于展示。
+	Nickname   string  `json:"nickname,omitempty"`
+	Email      string  `json:"email,omitempty"`
+	PlanTier   string  `json:"plan_tier,omitempty"`
+	UserType   string  `json:"user_type,omitempty"`
+	PaidPlan   bool    `json:"paid_plan"`
+	Limit      float64 `json:"limit"`
+	Used       float64 `json:"used"`
+	Remaining  float64 `json:"remaining"`
+	AgentLimit float64 `json:"agent_limit,omitempty"`
+	// AddOn 是独立于主额度的加成额度（上游 addOnQuota，与 userQuota.total 分开计量）。
+	AddOn          float64   `json:"add_on,omitempty"`
+	AddOnRemaining float64   `json:"add_on_remaining,omitempty"`
+	Exhausted      bool      `json:"exhausted"`
+	Unit           string    `json:"unit,omitempty"`
+	ResetAt        time.Time `json:"reset_at,omitempty"`
+	PeriodStart    time.Time `json:"period_start,omitempty"`
+	PeriodEnd      time.Time `json:"period_end,omitempty"`
+	UpgradeURL     string    `json:"upgrade_url,omitempty"`
+	Error          string    `json:"error,omitempty"`
+	SyncedAt       time.Time `json:"synced_at"`
 }
 
 type quotaUsageResponse struct {
@@ -43,15 +51,25 @@ type quotaUsageResponse struct {
 		Remaining float64 `json:"remaining"`
 		Unit      string  `json:"unit"`
 	} `json:"userQuota"`
+	AddOnQuota struct {
+		Total     float64 `json:"total"`
+		Used      float64 `json:"used"`
+		Remaining float64 `json:"remaining"`
+		Unit      string  `json:"unit"`
+	} `json:"addOnQuota"`
 }
 
 type quotaPlanResponse struct {
 	UserType     string `json:"user_type"`
 	PlanTierName string `json:"plan_tier_name"`
 	IsPaidPlan   bool   `json:"is_paid_plan"`
+	StartDate    int64  `json:"start_date"`
+	EndDate      int64  `json:"end_date"`
 }
 
 type quotaStatusResponse struct {
+	Name            string  `json:"name"`
+	Email           string  `json:"email"`
 	UserType        string  `json:"userType"`
 	UserTag         string  `json:"userTag"`
 	Plan            string  `json:"plan"`
@@ -97,6 +115,8 @@ func (c *Client) FetchQuota(ctx context.Context, cred qoderauth.Credential) (*Qu
 			if usage.ExpiresAt > 0 {
 				quota.PeriodEnd = quotaTime(usage.ExpiresAt)
 			}
+			quota.AddOn = usage.AddOnQuota.Total
+			quota.AddOnRemaining = usage.AddOnQuota.Remaining
 		}
 	} else {
 		firstErr = usageErr
@@ -116,6 +136,12 @@ func (c *Client) FetchQuota(ctx context.Context, cred qoderauth.Credential) (*Qu
 				quota.UserType = strings.TrimSpace(plan.UserType)
 			}
 			quota.PaidPlan = plan.IsPaidPlan
+			if plan.StartDate > 0 {
+				quota.PeriodStart = quotaTime(plan.StartDate)
+			}
+			if plan.EndDate > 0 {
+				quota.PeriodEnd = quotaTime(plan.EndDate)
+			}
 		}
 	} else if firstErr == nil {
 		firstErr = planErr
@@ -130,6 +156,8 @@ func (c *Client) FetchQuota(ctx context.Context, cred qoderauth.Credential) (*Qu
 			}
 		} else {
 			succeeded = true
+			quota.Nickname = strings.TrimSpace(status.Name)
+			quota.Email = strings.TrimSpace(status.Email)
 			if quota.UserType == "" {
 				quota.UserType = strings.TrimSpace(status.UserType)
 			}

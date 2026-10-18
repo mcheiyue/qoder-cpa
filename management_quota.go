@@ -82,6 +82,27 @@ func ctxOrBackground(ctx context.Context) context.Context {
 	return ctx
 }
 
+// applyUpstreamIdentity 用上游 nickname/email 补齐展示身份。只覆盖兜底值
+// （空、或等于 provider/文件名），用户自定义的 label/email 优先保留。
+func applyUpstreamIdentity(account *managementAccount, quota *qodercontrol.Quota) {
+	if quota == nil {
+		return
+	}
+	if nickname := strings.TrimSpace(quota.Nickname); nickname != "" && isFallbackIdentity(account) {
+		account.Label = nickname
+	}
+	if email := strings.TrimSpace(quota.Email); email != "" && account.Email == "" {
+		account.Email = email
+	}
+}
+
+func isFallbackIdentity(account *managementAccount) bool {
+	if fallbackQoderLabel(account.Label) {
+		return true
+	}
+	return account.Label == strings.TrimSuffix(account.Name, ".json")
+}
+
 func applyManagementQuota(target interface{ setQuota(managementQuota) }, quota *qodercontrol.Quota, quotaErr error) {
 	if quota == nil {
 		if quotaErr != nil {
@@ -92,6 +113,7 @@ func applyManagementQuota(target interface{ setQuota(managementQuota) }, quota *
 	value := managementQuota{
 		PlanTier: quota.PlanTier, UserType: quota.UserType, PaidPlan: quota.PaidPlan,
 		Remaining: quota.Remaining, Limit: quota.Limit, Used: quota.Used, AgentLimit: quota.AgentLimit,
+		AddOn: quota.AddOn, AddOnRemaining: quota.AddOnRemaining,
 		Exhausted: quota.Exhausted, Unit: quota.Unit, UpgradeURL: quota.UpgradeURL,
 		QuotaError: quota.Error,
 	}
@@ -101,6 +123,10 @@ func applyManagementQuota(target interface{ setQuota(managementQuota) }, quota *
 	if !quota.ResetAt.IsZero() {
 		resetAt := quota.ResetAt
 		value.ResetAt = &resetAt
+	}
+	if !quota.PeriodStart.IsZero() {
+		periodStart := quota.PeriodStart
+		value.PeriodStart = &periodStart
 	}
 	if !quota.PeriodEnd.IsZero() {
 		periodEnd := quota.PeriodEnd
@@ -126,7 +152,9 @@ func qodercontrolError(err error) string {
 func (a *managementAccount) setQuota(quota managementQuota) {
 	a.PlanTier, a.UserType, a.PaidPlan = quota.PlanTier, quota.UserType, quota.PaidPlan
 	a.Remaining, a.Limit, a.Used, a.AgentLimit = quota.Remaining, quota.Limit, quota.Used, quota.AgentLimit
-	a.Exhausted, a.Unit, a.ResetAt, a.PeriodEnd = quota.Exhausted, quota.Unit, quota.ResetAt, quota.PeriodEnd
+	a.AddOn, a.AddOnRemaining = quota.AddOn, quota.AddOnRemaining
+	a.Exhausted, a.Unit, a.ResetAt = quota.Exhausted, quota.Unit, quota.ResetAt
+	a.PeriodStart, a.PeriodEnd = quota.PeriodStart, quota.PeriodEnd
 	a.UpgradeURL, a.QuotaError, a.QuotaSyncedAt = quota.UpgradeURL, quota.QuotaError, quota.QuotaSyncedAt
 }
 

@@ -161,6 +161,43 @@ func TestFetchQuota_FailureDoesNotInvalidateCred(t *testing.T) {
 	// The credential is not modified - this is verified by the caller, not this function.
 }
 
+// 锁：上游 /api/v2/user/plan 的 start_date/end_date 是试用起止，
+// /api/v2/quota/usage 的 addOnQuota 是独立于主额度的加成桶。缺任一项，
+// 面板上 "Pro Trial" 就只剩名字、看不到到期日与加成额度。
+func TestFetchQuota_ParsesTrialWindowAndAddOnQuota(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case quotaUsagePath:
+			io.WriteString(w, `{"userQuota":{"total":300,"used":0,"remaining":300,"unit":"credits"},"addOnQuota":{"total":100,"used":0,"remaining":100,"unit":"credits"}}`)
+		case quotaPlanPath:
+			io.WriteString(w, `{"plan_tier_name":"Pro Trial","start_date":1792243326471,"end_date":1793452926471}`)
+		case quotaStatusPath:
+			io.WriteString(w, `{"name":"nick5805205645","email":"","userTag":"Pro Trial","nextResetAt":1793452926471}`)
+		}
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	q, err := c.FetchQuota(context.Background(), qoderauth.Credential{AccessToken: "at"})
+	if err != nil {
+		t.Fatalf("FetchQuota: %v", err)
+	}
+	if q.Nickname != "nick5805205645" {
+		t.Errorf("Nickname=%q", q.Nickname)
+	}
+	if q.AddOn != 100 || q.AddOnRemaining != 100 {
+		t.Errorf("addOn=%v/%v, want 100/100", q.AddOn, q.AddOnRemaining)
+	}
+	if q.Remaining != 300 || q.Limit != 300 {
+		t.Errorf("main quota must stay separate from addOn: %+v", q)
+	}
+	wantEnd := time.Unix(1793452926, 0).UTC()
+	if !q.PeriodEnd.Equal(wantEnd) || q.PeriodStart.IsZero() {
+		t.Errorf("period=%v..%v, want start set and end %v", q.PeriodStart, q.PeriodEnd, wantEnd)
+	}
+}
+
 func TestQuotaTimeHandlesMilliseconds(t *testing.T) {
 	want := time.Unix(1770000000, 0).UTC()
 	if got := quotaTime(1770000000000); !got.Equal(want) {
