@@ -94,6 +94,12 @@ func applyUpstreamIdentity(account *managementAccount, quota *qodercontrol.Quota
 	if email := strings.TrimSpace(quota.Email); email != "" && account.Email == "" {
 		account.Email = email
 	}
+	// 国内站账号 email 为空，用 security_mobile 填 email 列，否则面板只剩无区分度的昵称。
+	if account.Email == "" {
+		if mobile := strings.TrimSpace(quota.Mobile); mobile != "" {
+			account.Email = mobile
+		}
+	}
 }
 
 func isFallbackIdentity(account *managementAccount) bool {

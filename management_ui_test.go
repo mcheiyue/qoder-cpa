@@ -74,9 +74,37 @@ func TestManagementAccountsUsesUpstreamNicknameOverFileName(t *testing.T) {
 	}
 }
 
-// 锁：模型目录合并必须按 profile 分区。qoder 国际站与 CN 站的同一模型倍率不同
-// （实测 deepseek-v4.1-flash 国际 x0.00 / 国内 x0.11），按调用 ID 去重会让先遍历的
-// 账号独占该行、另一站的真实倍率被静默丢弃。
+// 锁：国内站（阿里云 SSO）账号的 /api/v1/userinfo 只给 security_mobile、email 恒为空，
+// 面板 email 列会一直显示 "-"，而昵称是 nick<数字> 这种无区分度串。手机号必须回填。
+func TestManagementAccountsFallsBackToMobileWhenEmailEmpty(t *testing.T) {
+	previous := defaultManagementService
+	t.Cleanup(func() { defaultManagementService = previous })
+	defaultManagementService = &managementService{
+		hostCall: uiHostCall([]pluginapi.HostAuthFileEntry{
+			{AuthIndex: "cn", Name: "qoder-cn.json", Provider: "qoder", Label: "qoder"},
+		}, nil),
+		fetchQuota: func(_ context.Context, cred qoderauth.Credential) (*qodercontrol.Quota, error) {
+			return &qodercontrol.Quota{Nickname: "nick9504777579", Mobile: "18074073866", SyncedAt: time.Now().UTC()}, nil
+		},
+	}
+	response, err := (managementHandler{kind: "accounts"}).HandleManagement(context.Background(), pluginapi.ManagementRequest{})
+	if err != nil || response.StatusCode != 200 {
+		t.Fatalf("response=%+v err=%v", response, err)
+	}
+	var body managementAccountsResponse
+	if err := json.Unmarshal(response.Body, &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Accounts) != 1 {
+		t.Fatalf("accounts=%+v", body.Accounts)
+	}
+	if body.Accounts[0].Email != "18074073866" {
+		t.Errorf("mobile must backfill email column, got %q", body.Accounts[0].Email)
+	}
+}
+
+// 锁：模型目录合并必须按 profile 分区。同一调用 ID 在两个 transport profile 下
+// 由不同凭证产出，按调用 ID 去重会让先遍历的账号独占该行、另一站的值被静默丢弃。
 func TestManagementModelsKeepsBothProfiles(t *testing.T) {
 	previous := defaultManagementService
 	t.Cleanup(func() { defaultManagementService = previous })

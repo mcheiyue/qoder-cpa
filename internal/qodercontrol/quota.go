@@ -14,10 +14,13 @@ import (
 
 // Quota holds account quota/subscription information.
 type Quota struct {
-	// Nickname/Email 来自 /api/v3/user/status；auth 文件本身不含这两个元数据，
-	// 缺了它们管理面板只能显示文件名（qoder-<sha256>.json）。仅用于展示。
-	Nickname   string  `json:"nickname,omitempty"`
-	Email      string  `json:"email,omitempty"`
+	// Nickname/Email/Mobile 来自 /api/v3/user/status 与 /api/v1/userinfo；auth 文件本身不含这些
+	// 元数据，缺了它们管理面板只能显示文件名（qoder-<sha256>.json）。仅用于展示。
+	Nickname string `json:"nickname,omitempty"`
+	Email    string `json:"email,omitempty"`
+	// Mobile 是上游 security_mobile（国内站阿里云 SSO 账号有值，国际站邮箱账号为空）。
+	// 国内号 email 为空，手机号是唯一可读的身份标识。
+	Mobile     string  `json:"mobile,omitempty"`
 	PlanTier   string  `json:"plan_tier,omitempty"`
 	UserType   string  `json:"user_type,omitempty"`
 	PaidPlan   bool    `json:"paid_plan"`
@@ -186,6 +189,13 @@ func (c *Client) FetchQuota(ctx context.Context, cred qoderauth.Credential) (*Qu
 
 	if quota.Unit == "" && (quota.Limit != 0 || quota.Remaining != 0) {
 		quota.Unit = "credits"
+	}
+	// 国内站（阿里云 SSO）账号的 email 恒为空，手机号是唯一可读身份。国际站账号已有
+	// email，故按 profile 门控，省掉每账号一次往返。
+	if cred.Profile == qoderauth.TransportProfileCosyCN && quota.Email == "" {
+		if info, infoErr := c.FetchProfile(ctx, cred); infoErr == nil && info != nil {
+			quota.Mobile = strings.TrimSpace(info.Mobile)
+		}
 	}
 	if firstErr != nil {
 		quota.Error = summarizeQuotaError(firstErr)

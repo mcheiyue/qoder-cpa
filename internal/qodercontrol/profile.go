@@ -15,6 +15,7 @@ type Profile struct {
 	UserID           string   `json:"user_id"`
 	Email            string   `json:"email"`
 	Name             string   `json:"name"`
+	Mobile           string   `json:"mobile"`
 	OrganizationID   string   `json:"organization_id"`
 	OrganizationTags []string `json:"organization_tags"`
 }
@@ -24,6 +25,7 @@ type profileResponse struct {
 	UID              string   `json:"uid"`
 	Email            string   `json:"email"`
 	Name             string   `json:"name"`
+	SecurityMobile   string   `json:"security_mobile"`
 	OrganizationID   string   `json:"organization_id"`
 	OrganizationTags []string `json:"organization_tags"`
 }
@@ -50,6 +52,7 @@ func (c *Client) FetchProfile(ctx context.Context, cred qoderauth.Credential) (*
 		UserID:           pr.UserID,
 		Email:            pr.Email,
 		Name:             pr.Name,
+		Mobile:           pr.SecurityMobile,
 		OrganizationID:   pr.OrganizationID,
 		OrganizationTags: append([]string(nil), pr.OrganizationTags...),
 	}, nil
