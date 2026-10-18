@@ -38,17 +38,16 @@ func TestEmbeddedWebUISendsManagementKey(t *testing.T) {
 }
 
 // TestEmbeddedWebUIModelsRateColumn 锁模型目录契约：调用 ID 在前、展示名次之、
-// 「区域」列区分国内外、倍率殿后；免费档绿标、促销角标透出。「来源账号」列已删除——
-// 同一上游目录被 8 个账号各复制一份，该列只是噪音。区域列不可省：国际站与 CN 站
-// 对同一模型给出不同倍率（实测 deepseek-v4.1-flash 国际 x0.00 / 国内 x0.11），
-// 合并成一行会让另一站的真实值被静默丢弃。
+// 全球/国内倍率分列（与 workbuddy 面板同款），免费档绿标、促销角标透出。
+// 「来源账号」列已删除——同一上游目录被 8 个账号各复制一份，该列只是噪音。
+// 分列而非分行：现网 25 个模型跨区域倍率差异为 0，拆成两行只是重复信息。
 func TestEmbeddedWebUIModelsRateColumn(t *testing.T) {
 	html := string(qoderWebUI)
 	for _, required := range []string{
-		"<th>调用 ID</th><th>展示名</th><th>区域</th><th>倍率</th>",
+		"<th>调用 ID</th><th>展示名</th><th>全球</th><th>国内</th>",
 		"function rateCell",
-		"function regionLabel",
-		"model.profile",
+		"function mergeModels",
+		"row.profile === 'cosy-cn'",
 		"免费",
 		"model.is_free",
 		"model.badge",
