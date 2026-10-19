@@ -66,7 +66,8 @@ func (s executorService) open(ctx context.Context, req rpcExecutorRequest) (qode
 	resolve := func(publicID string) qodertransport.ResolvedModel {
 		internalID, meta := registry.resolveModel(authID, publicID)
 		return qodertransport.ResolvedModel{
-			InternalID: internalID, IsReasoning: meta.IsReasoning, MaxInputTokens: meta.MaxInputTokens,
+			InternalID: internalID, IsReasoning: meta.IsReasoning,
+			MaxInputTokens: meta.MaxInputTokens, Thinking: meta.Thinking,
 		}
 	}
 	selector, err := s.selectorFactory(client, cred, resolve)

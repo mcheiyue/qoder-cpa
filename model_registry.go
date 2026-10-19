@@ -5,12 +5,14 @@ import (
 	"sync"
 
 	"github.com/mcheiyue/qoder-cpa/internal/qoderauth"
+	"github.com/mcheiyue/qoder-cpa/internal/qodercontrol"
 )
 
 // ModelMeta carries per-model catalog metadata for COSY request semantics.
 type ModelMeta struct {
 	IsReasoning    bool
 	MaxInputTokens int
+	Thinking       qodercontrol.Thinking
 }
 
 type modelRecord struct {

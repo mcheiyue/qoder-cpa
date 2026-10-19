@@ -26,6 +26,8 @@ type Model struct {
 	IsFree      bool    `json:"is_free"`
 	// PromotionBadge 是上游促销角标（如「错峰2折」），空串表示该模型无促销。
 	PromotionBadge string `json:"promotion_badge,omitempty"`
+	// Thinking 是上游 thinking_config 声明的档位表；零值表示目录未声明。
+	Thinking Thinking `json:"-"`
 }
 
 func (m *Model) UnmarshalJSON(raw []byte) error {
@@ -172,6 +174,7 @@ func collectModels(value any) []Model {
 						PriceFactor:    floatValue(typed["price_factor"]),
 						IsFree:         boolValue(typed["is_free"]),
 						PromotionBadge: promotionBadge(typed["promotion"]),
+						Thinking:       parseThinking(typed["thinking_config"]),
 					})
 				}
 			}

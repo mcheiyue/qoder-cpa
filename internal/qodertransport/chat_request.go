@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mcheiyue/qoder-cpa/internal/qoderauth"
+	"github.com/mcheiyue/qoder-cpa/internal/qodercontrol"
 	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/bearer"
 	"github.com/mcheiyue/qoder-cpa/internal/qodertransport/cosy"
 )
@@ -17,25 +18,27 @@ type ResolvedModel struct {
 	InternalID     string
 	IsReasoning    bool
 	MaxInputTokens int
+	Thinking       qodercontrol.Thinking
 }
 
 // ModelResolver translates a client-facing Qoder model ID to its upstream key and metadata.
 type ModelResolver func(publicID string) ResolvedModel
 
 type chatPayload struct {
-	Model               string            `json:"model"`
-	PublicModel         string            `json:"-"`
-	Messages            []chatMessageWire `json:"messages"`
-	Tools               []json.RawMessage `json:"tools"`
-	ToolChoice          json.RawMessage   `json:"tool_choice"`
-	Temperature         *float64          `json:"temperature"`
-	MaxTokens           *int              `json:"max_tokens"`
-	ReasoningEffort     *string           `json:"reasoning_effort"`
-	MaxCompletionTokens *int              `json:"max_completion_tokens"`
-	ParallelToolCalls   *bool             `json:"parallel_tool_calls"`
-	ResponseFormat      json.RawMessage   `json:"response_format"`
-	IsReasoning         bool              `json:"-"`
-	MaxInputTokens      int               `json:"-"`
+	Model               string                `json:"model"`
+	PublicModel         string                `json:"-"`
+	Messages            []chatMessageWire     `json:"messages"`
+	Tools               []json.RawMessage     `json:"tools"`
+	ToolChoice          json.RawMessage       `json:"tool_choice"`
+	Temperature         *float64              `json:"temperature"`
+	MaxTokens           *int                  `json:"max_tokens"`
+	ReasoningEffort     *string               `json:"reasoning_effort"`
+	MaxCompletionTokens *int                  `json:"max_completion_tokens"`
+	ParallelToolCalls   *bool                 `json:"parallel_tool_calls"`
+	ResponseFormat      json.RawMessage       `json:"response_format"`
+	IsReasoning         bool                  `json:"-"`
+	MaxInputTokens      int                   `json:"-"`
+	Thinking            qodercontrol.Thinking `json:"-"`
 }
 
 type chatMessageWire struct {
@@ -68,6 +71,7 @@ func parseChatPayload(raw []byte, resolve ModelResolver) (chatPayload, error) {
 		}
 		payload.IsReasoning = resolved.IsReasoning
 		payload.MaxInputTokens = resolved.MaxInputTokens
+		payload.Thinking = resolved.Thinking
 	}
 	if payload.Model == "" || len(payload.Messages) == 0 {
 		return chatPayload{}, errInvalidChatPayload
@@ -158,15 +162,25 @@ func toCosyRequest(payload chatPayload, req StreamRequest) (cosy.BuildRequestInp
 	// Build COSY parameters: only allocate when at least one field is set.
 	// max_tokens priority: max_completion_tokens (if present) > max_tokens.
 	var params *cosy.Parameters
-	effort := strings.ToLower(strings.TrimSpace(derefString(payload.ReasoningEffort)))
-	enableThinking := payload.IsReasoning && effort != "none"
+	requested := strings.ToLower(strings.TrimSpace(derefString(payload.ReasoningEffort)))
+	effort := payload.Thinking.NormalizeEffort(requested)
+	enableThinking := payload.IsReasoning
+	if payload.Thinking.HasConfig {
+		enableThinking = payload.Thinking.DefaultOn
+	}
+	switch {
+	case effort == "none":
+		enableThinking = false
+	case requested != "":
+		enableThinking = true
+	}
 	contextLength := payload.MaxInputTokens
 	if payload.MaxCompletionTokens != nil || payload.MaxTokens != nil ||
-		effort != "" ||
+		requested != "" ||
 		len(payload.ToolChoice) > 0 ||
 		payload.ParallelToolCalls != nil ||
 		len(payload.ResponseFormat) > 0 ||
-		enableThinking ||
+		payload.IsReasoning || payload.Thinking.HasConfig ||
 		contextLength > 0 {
 		p := cosy.Parameters{
 			ToolChoice:        payload.ToolChoice,
@@ -179,7 +193,7 @@ func toCosyRequest(payload chatPayload, req StreamRequest) (cosy.BuildRequestInp
 			p.MaxTokens = payload.MaxTokens
 		}
 		// COSY reasoning semantics: "none" disables thinking; other effort strings are forwarded.
-		if payload.IsReasoning || effort == "none" {
+		if payload.IsReasoning || payload.Thinking.HasConfig || requested == "none" {
 			v := enableThinking
 			p.EnableThinking = &v
 		}
