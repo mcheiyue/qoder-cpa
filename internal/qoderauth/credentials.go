@@ -58,6 +58,8 @@ type Credential struct {
 // StorageJSON is the JSON form persisted by CPA auth store.
 // Only Credential fields and Profile are serialized; verifier/nonce/device
 // state are never included.
+// Label/Email are display metadata read by the host and cpamp; when absent they
+// fall back to the file name (qoder-<64 hex>).
 type StorageJSON struct {
 	AccessToken      string           `json:"access_token"`
 	RefreshToken     string           `json:"refresh_token"`
@@ -66,6 +68,7 @@ type StorageJSON struct {
 	UserType         string           `json:"user_type,omitempty"`
 	MachineID        MachineID        `json:"machine_id,omitempty"`
 	Email            string           `json:"email"`
+	Label            string           `json:"label,omitempty"`
 	OrganizationID   string           `json:"organization_id,omitempty"`
 	OrganizationTags []string         `json:"organization_tags,omitempty"`
 	RuntimeInfo      string           `json:"runtime_info,omitempty"`

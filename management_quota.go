@@ -41,9 +41,29 @@ func (s *managementService) refreshQuota(ctx context.Context, raw []byte) (plugi
 	}
 	// Persist only the real UserType reported by quota/profile endpoints.
 	// Missing (empty) never overwrites storage with a static account class.
+	changed := false
 	if quota.UserType != "" && quota.UserType != storage.UserType {
 		storage.UserType = quota.UserType
-		if encoded, err := json.Marshal(storage); err == nil && auth.Name != "" {
+		changed = true
+	}
+	// 显示名只写一次：Label 已有值即为用户自定义，不覆盖。
+	// 宿主与 cpamp 读顶层 label/email，缺失时显示文件名；国内站上游 email 恒空，
+	// 手机号是唯一可读标识，故 email 位置写 Mobile。
+	if storage.Label == "" && quota.Nickname != "" {
+		storage.Label = quota.Nickname
+		changed = true
+	}
+	if storage.Email == "" {
+		if ident := quota.Email; ident != "" {
+			storage.Email = ident
+			changed = true
+		} else if quota.Mobile != "" {
+			storage.Email = quota.Mobile
+			changed = true
+		}
+	}
+	if changed && auth.Name != "" {
+		if encoded, err := json.Marshal(storage); err == nil {
 			_, _ = s.hostCall(pluginabi.MethodHostAuthSave, pluginapi.HostAuthSaveRequest{Name: auth.Name, JSON: encoded})
 		}
 	}
