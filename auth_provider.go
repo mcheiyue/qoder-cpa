@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/mcheiyue/qoder-cpa/internal/qoderauth"
 	"github.com/mcheiyue/qoder-cpa/internal/qodercontrol"
@@ -46,6 +47,26 @@ type rpcAuthRefreshRequest struct {
 	HostCallbackID string `json:"host_callback_id,omitempty"`
 }
 
+// refreshLead 是 NextRefreshAfter 相对凭证过期时刻的提前量。
+// 宿主 auto_refresh_loop 只在 NextRefreshAfter 到点时才发 refresh，
+// 若等于过期时刻则一次失败即 token 已死；ProviderRefreshLead("qoder")
+// 返回 nil（宿主只注册了 codex/claude/antigravity/kimi/xai/devin/meta），
+// 所以提前量只能由插件给出。
+const refreshLead = 5 * time.Minute
+
+// refreshAfterFor 把过期时刻前移 refreshLead，且不早于当前时刻。
+// 夹到 now 是为了避免已过期凭证算出「过去很久」的刷新点，那会让宿主立刻重刷并反复失败。
+func refreshAfterFor(expiry time.Time) time.Time {
+	if expiry.IsZero() {
+		return time.Time{}
+	}
+	next := expiry.Add(-refreshLead)
+	if now := time.Now(); next.Before(now) {
+		return now
+	}
+	return next
+}
+
 func authData(cred qoderauth.Credential, fileName string) (pluginapi.AuthData, error) {
 	if err := cred.Validate(); err != nil {
 		return pluginapi.AuthData{}, err
@@ -68,7 +89,7 @@ func authData(cred qoderauth.Credential, fileName string) (pluginapi.AuthData, e
 	return pluginapi.AuthData{
 		Provider: qoderauth.Provider, ID: id, FileName: fileName, Label: label,
 		StorageJSON: storage, Attributes: map[string]string{"transport_profile": string(cred.Profile)},
-		NextRefreshAfter: cred.ExpiresAt,
+		NextRefreshAfter: refreshAfterFor(cred.ExpiresAt),
 	}, nil
 }
 
