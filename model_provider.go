@@ -67,7 +67,7 @@ func (s authService) models(ctx context.Context, raw []byte) (pluginapi.ModelRes
 			continue
 		}
 		mapping[publicID] = internalID
-		meta[publicID] = ModelMeta{IsReasoning: model.IsReasoning, MaxInputTokens: model.MaxInputTokens, Thinking: model.Thinking}
+		meta[publicID] = ModelMeta{IsReasoning: model.IsReasoning, MaxInputTokens: model.MaxInputTokens}
 		info := pluginapi.ModelInfo{
 			ID: publicID, Object: "model", OwnedBy: qoderauth.Provider,
 			Name: internalID, DisplayName: name,
