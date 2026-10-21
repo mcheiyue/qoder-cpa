@@ -64,7 +64,7 @@ func (s *managementService) refreshQuota(ctx context.Context, raw []byte) (plugi
 	}
 	if changed && auth.Name != "" {
 		if encoded, err := json.Marshal(storage); err == nil {
-			_, _ = s.hostCall(pluginabi.MethodHostAuthSave, pluginapi.HostAuthSaveRequest{Name: auth.Name, JSON: encoded})
+			_ = s.saveAuthPreservingHostKeys(auth.Name, auth.JSON, encoded)
 		}
 	}
 	return jsonManagementResponse(http.StatusOK, response)
@@ -223,7 +223,7 @@ func (s *managementService) updateProfile(_ context.Context, raw []byte) (plugin
 	if name == "" {
 		return jsonManagementError(http.StatusBadRequest, "account has no writable name"), nil
 	}
-	if _, err := s.hostCall(pluginabi.MethodHostAuthSave, pluginapi.HostAuthSaveRequest{Name: name, JSON: encoded}); err != nil {
+	if err := s.saveAuthPreservingHostKeys(name, auth.JSON, encoded); err != nil {
 		return jsonManagementError(http.StatusBadGateway, "account update failed"), nil
 	}
 	return jsonManagementResponse(http.StatusOK, map[string]string{
