@@ -6,7 +6,7 @@ import (
 
 const (
 	pluginID = "qoder"
-	version  = "0.1.48"
+	version  = "0.1.49"
 	author   = "mcheiyue"
 	repoURL  = "https://github.com/mcheiyue/qoder-cpa"
 )
