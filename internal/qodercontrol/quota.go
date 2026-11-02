@@ -110,7 +110,7 @@ func (c *Client) FetchQuota(ctx context.Context, cred qoderauth.Credential) (*Qu
 			quota.Remaining = usage.UserQuota.Remaining
 			quota.Unit = strings.TrimSpace(usage.UserQuota.Unit)
 			quota.UpgradeURL = strings.TrimSpace(usage.UpgradeURL)
-			quota.Exhausted = usage.IsQuotaExceeded || (quota.Limit > 0 && quota.Remaining <= 0)
+			quota.Exhausted = quotaExhausted(usage.IsQuotaExceeded, quota.Limit, quota.Used, quota.Remaining)
 			quota.AgentLimit = usage.AgentLimit
 			if quota.AgentLimit == 0 {
 				quota.AgentLimit = usage.AgentLimitSnake
@@ -176,9 +176,6 @@ func (c *Client) FetchQuota(ctx context.Context, cred qoderauth.Credential) (*Qu
 					quota.AgentLimit = status.AgentLimitSnake
 				}
 			}
-			if status.IsQuotaExceeded {
-				quota.Exhausted = true
-			}
 			if status.NextResetAt > 0 {
 				quota.ResetAt = quotaTime(status.NextResetAt)
 			}
@@ -204,6 +201,15 @@ func (c *Client) FetchQuota(ctx context.Context, cred qoderauth.Credential) (*Qu
 		return quota, ErrQuotaUnknown
 	}
 	return quota, nil
+}
+
+// quotaExhausted 只在拿到额度数值时才下结论：上游只回布尔、不带任何读数时
+// 视为未知，避免把仍有余额的账号判死。
+func quotaExhausted(flag bool, limit, used, remaining float64) bool {
+	if limit <= 0 && used <= 0 && remaining <= 0 {
+		return false
+	}
+	return flag || (limit > 0 && remaining <= 0)
 }
 
 func quotaTime(value int64) time.Time {

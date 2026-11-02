@@ -198,6 +198,61 @@ func TestFetchQuota_ParsesTrialWindowAndAddOnQuota(t *testing.T) {
 	}
 }
 
+// 锁：上游可能只回 isQuotaExceeded 布尔而不带任何额度数值。此时账号是否
+// 耗尽属于未知，不能拿布尔把账号判死（否则面板与选号都会永久排除它）。
+func TestFetchQuota_BooleanOnlyMustNotMarkExhausted(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case quotaUsagePath:
+			io.WriteString(w, `{"isQuotaExceeded":true}`)
+		case quotaPlanPath:
+			io.WriteString(w, `{}`)
+		case quotaStatusPath:
+			io.WriteString(w, `{"name":"nick1","isQuotaExceeded":true}`)
+		}
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	q, err := c.FetchQuota(context.Background(), qoderauth.Credential{AccessToken: "at"})
+	if err != nil {
+		t.Fatalf("FetchQuota: %v", err)
+	}
+	if q.Exhausted {
+		t.Fatalf("boolean-only quota must not be exhausted: %+v", q)
+	}
+}
+
+// 锁：/api/v3/user/status 不携带任何额度数值，它的 isQuotaExceeded 只能作
+// 旁证，不能单独把账号判为耗尽。
+func TestFetchQuota_StatusBooleanAloneMustNotMarkExhausted(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case quotaUsagePath:
+			w.WriteHeader(http.StatusInternalServerError)
+		case quotaPlanPath:
+			io.WriteString(w, `{}`)
+		case quotaStatusPath:
+			io.WriteString(w, `{"name":"nick1","isQuotaExceeded":true}`)
+		}
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv)
+	q, err := c.FetchQuota(context.Background(), qoderauth.Credential{AccessToken: "at"})
+	if err != nil {
+		t.Fatalf("FetchQuota: %v", err)
+	}
+	if q.Exhausted {
+		t.Fatalf("status-only boolean must not be exhausted: %+v", q)
+	}
+	if q.Error != "upstream HTTP 500" {
+		t.Errorf("Error=%q, want sanitized upstream status", q.Error)
+	}
+}
+
 func TestQuotaTimeHandlesMilliseconds(t *testing.T) {
 	want := time.Unix(1770000000, 0).UTC()
 	if got := quotaTime(1770000000000); !got.Equal(want) {
