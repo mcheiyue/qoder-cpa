@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -158,6 +159,46 @@ func TestClassifyExecutorError_CosyHTTP429RateLimitedWithRetryAfter(t *testing.T
 	}
 	if !contains(f.message, "retry_after=30s") {
 		t.Errorf("message should carry retry_after, got: %q", f.message)
+	}
+	if f.retryAfter != 30 {
+		t.Errorf("retryAfter field: got %d, want 30 (structured hint for host Retry-After)", f.retryAfter)
+	}
+}
+
+func TestClassifyExecutorError_HTTPRetryAfterFieldZeroWhenAbsent(t *testing.T) {
+	f := classifyExecutorError(&bearer.HTTPError{StatusCode: 403})
+	if f == nil {
+		t.Fatal("nil failure")
+	}
+	if f.retryAfter != 0 {
+		t.Errorf("retryAfter field: got %d, want 0", f.retryAfter)
+	}
+}
+
+func TestErrorEnvelopeRetryCarriesRetryAfterSeconds(t *testing.T) {
+	raw := errorEnvelopeRetry("rate_limited", "rate limited", 429, 30)
+	var envelope struct {
+		OK    bool `json:"ok"`
+		Error struct {
+			Code              string `json:"code"`
+			RetryAfterSeconds int    `json:"retry_after_seconds,omitempty"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatalf("decode envelope: %v", err)
+	}
+	if envelope.OK {
+		t.Fatal("envelope must not be ok")
+	}
+	if !contains(string(raw), `"retry_after_seconds":30`) {
+		t.Fatalf("wire missing retry_after_seconds: %s", string(raw))
+	}
+}
+
+func TestErrorEnvelopeRetryOmittedWhenZero(t *testing.T) {
+	raw := errorEnvelopeRetry("upstream_error", "boom", 502, 0)
+	if contains(string(raw), "retry_after_seconds") {
+		t.Fatalf("retry_after_seconds must be omitted when 0: %s", string(raw))
 	}
 }
 

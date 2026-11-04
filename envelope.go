@@ -19,9 +19,16 @@ func errorEnvelope(code, message string) []byte {
 }
 
 func errorEnvelopeStatus(code, message string, status int) []byte {
+	return errorEnvelopeRetry(code, message, status, 0)
+}
+
+// errorEnvelopeRetry attaches the upstream retry hint (seconds) to the failure
+// envelope; values <= 0 omit the retry_after_seconds wire field. The host maps
+// it to a Retry-After response header (rpc_client.go RetryAfter).
+func errorEnvelopeRetry(code, message string, status, retryAfter int) []byte {
 	raw, err := json.Marshal(pluginabi.Envelope{
 		OK:    false,
-		Error: &pluginabi.Error{Code: code, Message: message, HTTPStatus: status},
+		Error: &pluginabi.Error{Code: code, Message: message, HTTPStatus: status, RetryAfterSeconds: retryAfter},
 	})
 	if err != nil {
 		return []byte(`{"ok":false,"error":{"code":"marshal_error","message":"failed to encode error envelope"}}`)

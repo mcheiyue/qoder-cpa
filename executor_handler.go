@@ -38,7 +38,7 @@ func handleExecutorMethod(method string, raw []byte) ([]byte, error) {
 	if err != nil {
 		failure := classifyExecutorError(err)
 		noteSchedulerFailure(request.AuthID, request.Model, err)
-		return errorEnvelopeStatus(failure.code, failure.message, failure.status), nil
+		return errorEnvelopeRetry(failure.code, failure.message, failure.status, failure.retryAfter), nil
 	}
 	return okEnvelope(result)
 }

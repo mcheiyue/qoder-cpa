@@ -16,7 +16,11 @@ type executorFailure struct {
 	code    string
 	message string
 	status  int
-	cause   error
+	// retryAfter carries the upstream Retry-After hint in seconds (0 = absent);
+	// it reaches the host as pluginabi.Error.RetryAfterSeconds via
+	// errorEnvelopeRetry and becomes a Retry-After response header.
+	retryAfter int
+	cause      error
 }
 
 func (e *executorFailure) Error() string { return e.message }
@@ -60,9 +64,10 @@ func httpFailure(status, retrySec int, msg string, cause error) *executorFailure
 		msg += " retry_after=" + strconv.Itoa(retrySec) + "s"
 	}
 	return &executorFailure{
-		code:    qoderstream.StatusCategory(status),
-		message: msg,
-		status:  status,
-		cause:   cause,
+		code:       qoderstream.StatusCategory(status),
+		message:    msg,
+		status:     status,
+		retryAfter: retrySec,
+		cause:      cause,
 	}
 }

@@ -114,8 +114,8 @@ func TestHandleMethodRegisterReturnsSchema6(t *testing.T) {
 	if err := json.Unmarshal(env.Result, &reg); err != nil {
 		t.Fatal(err)
 	}
-	if reg.SchemaVersion != 6 {
-		t.Fatalf("schema=%d, want 6", reg.SchemaVersion)
+	if reg.SchemaVersion != pluginabi.SchemaVersion {
+		t.Fatalf("schema=%d, want %d", reg.SchemaVersion, pluginabi.SchemaVersion)
 	}
 }
 

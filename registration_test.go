@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 )
 
 func TestRegistrationSchema6QoderCapabilities(t *testing.T) {
@@ -35,9 +37,10 @@ func TestRegistrationSchema6QoderCapabilities(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Then: schema = 6, provider = qoder, no model_router, no request_interceptor.
-	if reg.SchemaVersion != 6 {
-		t.Fatalf("schema=%d, want 6", reg.SchemaVersion)
+	// Then: schema tracks the SDK constant (>= omit-body gate), provider = qoder,
+	// no model_router, no request_interceptor.
+	if reg.SchemaVersion != pluginabi.SchemaVersion {
+		t.Fatalf("schema=%d, want %d", reg.SchemaVersion, pluginabi.SchemaVersion)
 	}
 	if reg.Metadata.Name != "qoder" {
 		t.Fatalf("Name=%q, want %q", reg.Metadata.Name, "qoder")
