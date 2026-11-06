@@ -59,31 +59,32 @@ type managementModel struct {
 }
 
 type managementAccount struct {
-	AuthIndex      string     `json:"auth_index"`
-	Name           string     `json:"name"`
-	Label          string     `json:"label,omitempty"`
-	Email          string     `json:"email,omitempty"`
-	Profile        string     `json:"transport_profile,omitempty"`
-	Status         string     `json:"status,omitempty"`
-	Disabled       bool       `json:"disabled,omitempty"`
-	NeedsAuth      bool       `json:"needs_reauth,omitempty"`
-	PlanTier       string     `json:"plan_tier,omitempty"`
-	UserType       string     `json:"user_type,omitempty"`
-	PaidPlan       bool       `json:"paid_plan,omitempty"`
-	Remaining      float64    `json:"remaining,omitempty"`
-	Limit          float64    `json:"limit,omitempty"`
-	Used           float64    `json:"used,omitempty"`
-	AddOn          float64    `json:"add_on,omitempty"`
-	AddOnRemaining float64    `json:"add_on_remaining,omitempty"`
-	AgentLimit     float64    `json:"agent_limit,omitempty"`
-	Exhausted      bool       `json:"exhausted,omitempty"`
-	Unit           string     `json:"unit,omitempty"`
-	ResetAt        *time.Time `json:"reset_at,omitempty"`
-	PeriodStart    *time.Time `json:"period_start,omitempty"`
-	PeriodEnd      *time.Time `json:"period_end,omitempty"`
-	UpgradeURL     string     `json:"upgrade_url,omitempty"`
-	QuotaError     string     `json:"quota_error,omitempty"`
-	QuotaSyncedAt  *time.Time `json:"quota_synced_at,omitempty"`
+	AuthIndex      string                        `json:"auth_index"`
+	Name           string                        `json:"name"`
+	Label          string                        `json:"label,omitempty"`
+	Email          string                        `json:"email,omitempty"`
+	Profile        string                        `json:"transport_profile,omitempty"`
+	Status         string                        `json:"status,omitempty"`
+	Disabled       bool                          `json:"disabled,omitempty"`
+	NeedsAuth      bool                          `json:"needs_reauth,omitempty"`
+	PlanTier       string                        `json:"plan_tier,omitempty"`
+	UserType       string                        `json:"user_type,omitempty"`
+	PaidPlan       bool                          `json:"paid_plan,omitempty"`
+	Remaining      float64                       `json:"remaining,omitempty"`
+	Limit          float64                       `json:"limit,omitempty"`
+	Used           float64                       `json:"used,omitempty"`
+	AddOn          float64                       `json:"add_on,omitempty"`
+	AddOnRemaining float64                       `json:"add_on_remaining,omitempty"`
+	Dedicated      []qodercontrol.DedicatedQuota `json:"dedicated,omitempty"`
+	AgentLimit     float64                       `json:"agent_limit,omitempty"`
+	Exhausted      bool                          `json:"exhausted,omitempty"`
+	Unit           string                        `json:"unit,omitempty"`
+	ResetAt        *time.Time                    `json:"reset_at,omitempty"`
+	PeriodStart    *time.Time                    `json:"period_start,omitempty"`
+	PeriodEnd      *time.Time                    `json:"period_end,omitempty"`
+	UpgradeURL     string                        `json:"upgrade_url,omitempty"`
+	QuotaError     string                        `json:"quota_error,omitempty"`
+	QuotaSyncedAt  *time.Time                    `json:"quota_synced_at,omitempty"`
 	// Priority 是宿主路由优先级（数值越大越优先，缺省 0）；不带 omitempty，0 必须回显。
 	Priority int `json:"priority"`
 }
@@ -103,23 +104,24 @@ type managementQuotaResponse struct {
 }
 
 type managementQuota struct {
-	PlanTier       string     `json:"plan_tier,omitempty"`
-	UserType       string     `json:"user_type,omitempty"`
-	PaidPlan       bool       `json:"paid_plan,omitempty"`
-	Remaining      float64    `json:"remaining,omitempty"`
-	Limit          float64    `json:"limit,omitempty"`
-	Used           float64    `json:"used,omitempty"`
-	AddOn          float64    `json:"add_on,omitempty"`
-	AddOnRemaining float64    `json:"add_on_remaining,omitempty"`
-	AgentLimit     float64    `json:"agent_limit,omitempty"`
-	Exhausted      bool       `json:"exhausted,omitempty"`
-	Unit           string     `json:"unit,omitempty"`
-	ResetAt        *time.Time `json:"reset_at,omitempty"`
-	PeriodStart    *time.Time `json:"period_start,omitempty"`
-	PeriodEnd      *time.Time `json:"period_end,omitempty"`
-	UpgradeURL     string     `json:"upgrade_url,omitempty"`
-	QuotaError     string     `json:"quota_error,omitempty"`
-	QuotaSyncedAt  *time.Time `json:"quota_synced_at,omitempty"`
+	PlanTier       string                        `json:"plan_tier,omitempty"`
+	UserType       string                        `json:"user_type,omitempty"`
+	PaidPlan       bool                          `json:"paid_plan,omitempty"`
+	Remaining      float64                       `json:"remaining,omitempty"`
+	Limit          float64                       `json:"limit,omitempty"`
+	Used           float64                       `json:"used,omitempty"`
+	AddOn          float64                       `json:"add_on,omitempty"`
+	AddOnRemaining float64                       `json:"add_on_remaining,omitempty"`
+	Dedicated      []qodercontrol.DedicatedQuota `json:"dedicated,omitempty"`
+	AgentLimit     float64                       `json:"agent_limit,omitempty"`
+	Exhausted      bool                          `json:"exhausted,omitempty"`
+	Unit           string                        `json:"unit,omitempty"`
+	ResetAt        *time.Time                    `json:"reset_at,omitempty"`
+	PeriodStart    *time.Time                    `json:"period_start,omitempty"`
+	PeriodEnd      *time.Time                    `json:"period_end,omitempty"`
+	UpgradeURL     string                        `json:"upgrade_url,omitempty"`
+	QuotaError     string                        `json:"quota_error,omitempty"`
+	QuotaSyncedAt  *time.Time                    `json:"quota_synced_at,omitempty"`
 }
 
 func managementRegister() map[string]any {

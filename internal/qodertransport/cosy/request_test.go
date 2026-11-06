@@ -39,6 +39,17 @@ func TestBuildChatBody_MinimalInput(t *testing.T) {
 	if body.ModelConfig.Key != "lite" {
 		t.Errorf("model key: got %q, want %q", body.ModelConfig.Key, "lite")
 	}
+	var wire struct {
+		Business struct {
+			ModelKey string `json:"model_key"`
+		} `json:"business"`
+	}
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if wire.Business.ModelKey != "lite" {
+		t.Errorf("business.model_key: got %q, want lite", wire.Business.ModelKey)
+	}
 	if body.ModelConfig.Format != "openai" {
 		t.Errorf("model format: got %q, want %q", body.ModelConfig.Format, "openai")
 	}

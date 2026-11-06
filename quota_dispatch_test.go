@@ -161,7 +161,9 @@ func TestQuotaFetchSuccessSnapshotsScheduler(t *testing.T) {
 		if cred.AccessToken == "" {
 			t.Fatal("empty access token passed to fetch")
 		}
-		return &qodercontrol.Quota{Remaining: 42, Limit: 100, Used: 58, Unit: "次", Exhausted: false}, nil
+		return &qodercontrol.Quota{Remaining: 42, Limit: 100, Used: 58, Unit: "credits", Exhausted: false,
+			AddOn: 200, AddOnRemaining: 180, AddOnUsed: 20,
+			Dedicated: []qodercontrol.DedicatedQuota{{Name: "模型专属", Limit: 1000, Remaining: 900, Available: true}}}, nil
 	})
 	env := callQuota(t, "quota.fetch", map[string]any{
 		"provider":     "qoder",
@@ -187,12 +189,24 @@ func TestQuotaFetchSuccessSnapshotsScheduler(t *testing.T) {
 			remain = m.Value
 		}
 	}
-	if remain != 42 {
-		t.Fatalf("remain metric=%v, want 42 (summary=%+v)", remain, result.Summary)
+	if remain != 222 {
+		t.Fatalf("remain metric=%v, want 222 excluding dedicated (summary=%+v)", remain, result.Summary)
+	}
+	wantMetrics := map[string]float64{"used": 78, "limit": 300, "planRemain": 42, "addOnRemain": 180, "dedicated0": 900}
+	for _, m := range result.Summary {
+		if want, ok := wantMetrics[m.Key]; ok {
+			if m.Value != want {
+				t.Errorf("%s=%v want=%v", m.Key, m.Value, want)
+			}
+			delete(wantMetrics, m.Key)
+		}
+	}
+	if len(wantMetrics) != 0 {
+		t.Fatalf("missing metrics: %v", wantMetrics)
 	}
 	snap, ok := s.getQuota("auth-1")
-	if !ok || snap.remaining != 42 || snap.exhausted {
-		t.Fatalf("scheduler quota snapshot=%+v ok=%v, want remaining=42", snap, ok)
+	if !ok || snap.remaining != 222 || snap.exhausted {
+		t.Fatalf("scheduler quota snapshot=%+v ok=%v, want remaining=222", snap, ok)
 	}
 }
 

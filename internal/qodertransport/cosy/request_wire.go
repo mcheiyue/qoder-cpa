@@ -52,13 +52,14 @@ type modelConfigWire struct {
 }
 
 type businessInfo struct {
-	Product string `json:"product"`
-	Version string `json:"version"`
-	Type    string `json:"type"`
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	BeginAt int64  `json:"begin_at"`
-	Stage   string `json:"stage"`
+	ModelKey string `json:"model_key"`
+	Product  string `json:"product"`
+	Version  string `json:"version"`
+	Type     string `json:"type"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	BeginAt  int64  `json:"begin_at"`
+	Stage    string `json:"stage"`
 }
 
 // chatMessage is one message in the upstream history.

@@ -140,6 +140,7 @@ func applyManagementQuota(target interface{ setQuota(managementQuota) }, quota *
 		PlanTier: quota.PlanTier, UserType: quota.UserType, PaidPlan: quota.PaidPlan,
 		Remaining: quota.Remaining, Limit: quota.Limit, Used: quota.Used, AgentLimit: quota.AgentLimit,
 		AddOn: quota.AddOn, AddOnRemaining: quota.AddOnRemaining,
+		Dedicated: quota.Dedicated,
 		Exhausted: quota.Exhausted, Unit: quota.Unit, UpgradeURL: quota.UpgradeURL,
 		QuotaError: quota.Error,
 	}
@@ -179,6 +180,7 @@ func (a *managementAccount) setQuota(quota managementQuota) {
 	a.PlanTier, a.UserType, a.PaidPlan = quota.PlanTier, quota.UserType, quota.PaidPlan
 	a.Remaining, a.Limit, a.Used, a.AgentLimit = quota.Remaining, quota.Limit, quota.Used, quota.AgentLimit
 	a.AddOn, a.AddOnRemaining = quota.AddOn, quota.AddOnRemaining
+	a.Dedicated = quota.Dedicated
 	a.Exhausted, a.Unit, a.ResetAt = quota.Exhausted, quota.Unit, quota.ResetAt
 	a.PeriodStart, a.PeriodEnd = quota.PeriodStart, quota.PeriodEnd
 	a.UpgradeURL, a.QuotaError, a.QuotaSyncedAt = quota.UpgradeURL, quota.QuotaError, quota.QuotaSyncedAt

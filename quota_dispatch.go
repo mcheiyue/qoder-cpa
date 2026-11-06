@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/mcheiyue/qoder-cpa/internal/qoderauth"
@@ -71,14 +72,25 @@ func handleQuotaFetch(raw []byte) ([]byte, error) {
 	}
 	// Scheduler hook: per-AuthID quota snapshot for exhausted exclusion and weighting.
 	if aid := strings.TrimSpace(req.AuthID); aid != "" {
-		noteQuotaSnapshot(aid, quota.Remaining, quota.Exhausted)
+		noteQuotaSnapshot(aid, quota.Remaining+quota.AddOnRemaining, quota.Exhausted)
 	}
-	return okEnvelope(pluginapi.QuotaFetchResponse{
-		Summary: []pluginapi.QuotaMetric{
-			{Key: "remain", Label: "剩余额度", Value: quota.Remaining, Unit: quota.Unit},
-			{Key: "used", Label: "已用额度", Value: quota.Used, Unit: quota.Unit},
-			{Key: "limit", Label: "额度上限", Value: quota.Limit, Unit: quota.Unit},
-			{Key: "agentLimit", Label: "Agent额度", Value: quota.AgentLimit, Unit: quota.Unit},
-		},
-	})
+	summary := []pluginapi.QuotaMetric{
+		{Key: "remain", Label: "通用剩余额度", Value: quota.Remaining + quota.AddOnRemaining, Unit: quota.Unit},
+		{Key: "used", Label: "通用已用额度", Value: quota.Used + quota.AddOnUsed, Unit: quota.Unit},
+		{Key: "limit", Label: "通用额度上限", Value: quota.Limit + quota.AddOn, Unit: quota.Unit},
+		{Key: "agentLimit", Label: "Agent额度", Value: quota.AgentLimit, Unit: quota.Unit},
+		{Key: "planRemain", Label: "主额度剩余", Value: quota.Remaining, Unit: quota.Unit},
+		{Key: "addOnRemain", Label: "资源包剩余", Value: quota.AddOnRemaining, Unit: quota.Unit},
+	}
+	for i, pack := range quota.Dedicated {
+		label := pack.Name
+		if !pack.Available {
+			label += "（不可用）"
+		}
+		if !pack.ExpiresAt.IsZero() {
+			label += " · " + pack.ExpiresAt.Format("2006-01-02") + " 到期"
+		}
+		summary = append(summary, pluginapi.QuotaMetric{Key: "dedicated" + strconv.Itoa(i), Label: label, Value: pack.Remaining, Unit: quota.Unit})
+	}
+	return okEnvelope(pluginapi.QuotaFetchResponse{Summary: summary})
 }

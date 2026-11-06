@@ -185,13 +185,14 @@ func BuildChatBody(in BuildRequestInput) ([]byte, error) {
 			MaxInputTokens: in.ModelConfig.MaxInputTokens,
 		},
 		Business: businessInfo{
-			Product: product,
-			Version: in.CosyVersion,
-			Type:    "agent",
-			ID:      in.RequestID,
-			Name:    truncateRunes(in.SystemPrompt, 10),
-			BeginAt: beginAt,
-			Stage:   "start",
+			ModelKey: in.ModelKey,
+			Product:  product,
+			Version:  in.CosyVersion,
+			Type:     "agent",
+			ID:       in.RequestID,
+			Name:     truncateRunes(in.SystemPrompt, 10),
+			BeginAt:  beginAt,
+			Stage:    "start",
 		},
 	}
 	if body.Tools == nil {

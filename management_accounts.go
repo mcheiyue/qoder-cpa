@@ -77,7 +77,7 @@ func (s *managementService) accounts(ctx context.Context) (pluginapi.ManagementR
 						applyManagementQuota(&accounts[idx], quota, quotaErr)
 						applyUpstreamIdentity(&accounts[idx], quota)
 						if quotaErr == nil && quota != nil {
-							noteQuotaSnapshot(file.ID, quota.Remaining, quota.Exhausted)
+							noteQuotaSnapshot(file.ID, quota.Remaining+quota.AddOnRemaining, quota.Exhausted)
 						}
 					}
 				}

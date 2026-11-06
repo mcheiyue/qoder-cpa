@@ -29,16 +29,18 @@ type Quota struct {
 	Remaining  float64 `json:"remaining"`
 	AgentLimit float64 `json:"agent_limit,omitempty"`
 	// AddOn 是独立于主额度的加成额度（上游 addOnQuota，与 userQuota.total 分开计量）。
-	AddOn          float64   `json:"add_on,omitempty"`
-	AddOnRemaining float64   `json:"add_on_remaining,omitempty"`
-	Exhausted      bool      `json:"exhausted"`
-	Unit           string    `json:"unit,omitempty"`
-	ResetAt        time.Time `json:"reset_at,omitempty"`
-	PeriodStart    time.Time `json:"period_start,omitempty"`
-	PeriodEnd      time.Time `json:"period_end,omitempty"`
-	UpgradeURL     string    `json:"upgrade_url,omitempty"`
-	Error          string    `json:"error,omitempty"`
-	SyncedAt       time.Time `json:"synced_at"`
+	AddOn          float64          `json:"add_on,omitempty"`
+	AddOnRemaining float64          `json:"add_on_remaining,omitempty"`
+	AddOnUsed      float64          `json:"add_on_used,omitempty"`
+	Dedicated      []DedicatedQuota `json:"dedicated,omitempty"`
+	Exhausted      bool             `json:"exhausted"`
+	Unit           string           `json:"unit,omitempty"`
+	ResetAt        time.Time        `json:"reset_at,omitempty"`
+	PeriodStart    time.Time        `json:"period_start,omitempty"`
+	PeriodEnd      time.Time        `json:"period_end,omitempty"`
+	UpgradeURL     string           `json:"upgrade_url,omitempty"`
+	Error          string           `json:"error,omitempty"`
+	SyncedAt       time.Time        `json:"synced_at"`
 }
 
 type quotaUsageResponse struct {
@@ -60,6 +62,7 @@ type quotaUsageResponse struct {
 		Remaining float64 `json:"remaining"`
 		Unit      string  `json:"unit"`
 	} `json:"addOnQuota"`
+	Dedicated []dedicatedQuotaWire `json:"dedicatedResourcePackages"`
 }
 
 type quotaPlanResponse struct {
@@ -110,7 +113,6 @@ func (c *Client) FetchQuota(ctx context.Context, cred qoderauth.Credential) (*Qu
 			quota.Remaining = usage.UserQuota.Remaining
 			quota.Unit = strings.TrimSpace(usage.UserQuota.Unit)
 			quota.UpgradeURL = strings.TrimSpace(usage.UpgradeURL)
-			quota.Exhausted = quotaExhausted(usage.IsQuotaExceeded, quota.Limit, quota.Used, quota.Remaining)
 			quota.AgentLimit = usage.AgentLimit
 			if quota.AgentLimit == 0 {
 				quota.AgentLimit = usage.AgentLimitSnake
@@ -120,6 +122,17 @@ func (c *Client) FetchQuota(ctx context.Context, cred qoderauth.Credential) (*Qu
 			}
 			quota.AddOn = usage.AddOnQuota.Total
 			quota.AddOnRemaining = usage.AddOnQuota.Remaining
+			quota.AddOnUsed = usage.AddOnQuota.Used
+			quota.Dedicated = normalizeDedicatedQuota(usage.Dedicated, quota.SyncedAt)
+			quota.Exhausted = quotaExhausted(usage.IsQuotaExceeded, quota.Limit+quota.AddOn, quota.Used+quota.AddOnUsed, quota.Remaining+quota.AddOnRemaining)
+			for _, pack := range quota.Dedicated {
+				if pack.Available && pack.Remaining > 0 {
+					quota.Exhausted = false
+				}
+			}
+			if quota.Unit == "" {
+				quota.Unit = strings.TrimSpace(usage.AddOnQuota.Unit)
+			}
 		}
 	} else {
 		firstErr = usageErr
@@ -184,7 +197,7 @@ func (c *Client) FetchQuota(ctx context.Context, cred qoderauth.Credential) (*Qu
 		firstErr = statusErr
 	}
 
-	if quota.Unit == "" && (quota.Limit != 0 || quota.Remaining != 0) {
+	if quota.Unit == "" && (quota.Limit != 0 || quota.Remaining != 0 || quota.AddOn != 0 || quota.AddOnRemaining != 0) {
 		quota.Unit = "credits"
 	}
 	// 国内站（阿里云 SSO）账号的 email 恒为空，手机号是唯一可读身份。国际站账号已有
@@ -206,6 +219,9 @@ func (c *Client) FetchQuota(ctx context.Context, cred qoderauth.Credential) (*Qu
 // quotaExhausted 只在拿到额度数值时才下结论：上游只回布尔、不带任何读数时
 // 视为未知，避免把仍有余额的账号判死。
 func quotaExhausted(flag bool, limit, used, remaining float64) bool {
+	if remaining > 0 {
+		return false
+	}
 	if limit <= 0 && used <= 0 && remaining <= 0 {
 		return false
 	}
