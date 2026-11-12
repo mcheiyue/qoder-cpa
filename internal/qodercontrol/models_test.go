@@ -115,17 +115,22 @@ func TestFetchModels_NoFakeModels(t *testing.T) {
 	}
 }
 
-func TestParseCatalogNestedCapabilityGroups(t *testing.T) {
-	models, err := parseCatalog([]byte(`{"data":{"chat":[{"key":"qoder-1","name":"Qoder 1"}],"embedding":[{"key":"embed-1","name":"Embedding"}]}}`))
+func TestParseCatalogChatWinsAndAppOnlyModelsAreRetained(t *testing.T) {
+	models, err := parseCatalog([]byte(`{"data":[{"app":[{"key":"shared","name":"App name"},{"key":"app-only","name":"QoDuck"}]},{"chat":[{"key":"shared","name":"Chat name"},{"key":"chat-only","name":"Chat only"}]},{"embedding":[{"key":"embed-only"}],"inline":[{"key":"inline-only"}],"quest":[{"key":"quest-only"}]}]}`))
 	if err != nil {
 		t.Fatalf("parseCatalog: %v", err)
 	}
-	ids := map[string]bool{}
-	for _, model := range models {
-		ids[model.ID] = true
+	if len(models) != 3 {
+		t.Fatalf("models=%+v, want only chat and app conversational entries", models)
 	}
-	if len(models) != 2 || !ids["qoder-1"] || !ids["embed-1"] {
-		t.Fatalf("models=%+v, want nested catalog entries", models)
+	wantIDs := []string{"shared", "chat-only", "app-only"}
+	for i, want := range wantIDs {
+		if models[i].ID != want {
+			t.Fatalf("models[%d].ID=%q, want %q (models=%+v)", i, models[i].ID, want, models)
+		}
+	}
+	if models[0].Name != "Chat name" || models[2].Name != "QoDuck" {
+		t.Fatalf("chat entry must win duplicates and app-only entry must survive: %+v", models)
 	}
 }
 

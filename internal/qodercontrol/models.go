@@ -149,38 +149,68 @@ func parseCatalog(raw []byte) ([]Model, error) {
 func collectModels(value any) []Model {
 	seen := map[string]struct{}{}
 	models := make([]Model, 0)
-	var visit func(any)
-	visit = func(node any) {
+	appendModel := func(typed map[string]any) {
+		id := strings.TrimSpace(stringValue(typed["key"]))
+		if id == "" {
+			id = strings.TrimSpace(stringValue(typed["id"]))
+		}
+		if id == "" {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		models = append(models, Model{
+			ID:             id,
+			Name:           modelDisplayName(id, stringValue(typed["display_name"]), stringValue(typed["displayName"]), stringValue(typed["name"])),
+			IsReasoning:    boolValue(typed["is_reasoning"]),
+			MaxInputTokens: intValue(typed["max_input_tokens"]),
+			PriceFactor:    floatValue(typed["price_factor"]),
+			IsFree:         boolValue(typed["is_free"]),
+			PromotionBadge: promotionBadge(typed["promotion"]),
+		})
+	}
+	var collectGroup func(any)
+	collectGroup = func(node any) {
 		switch typed := node.(type) {
 		case []any:
 			for _, item := range typed {
-				visit(item)
+				collectGroup(item)
 			}
 		case map[string]any:
-			id := strings.TrimSpace(stringValue(typed["key"]))
-			if id == "" {
-				id = strings.TrimSpace(stringValue(typed["id"]))
-			}
-			if id != "" {
-				if _, ok := seen[id]; !ok {
-					seen[id] = struct{}{}
-					models = append(models, Model{
-						ID:             id,
-						Name:           modelDisplayName(id, stringValue(typed["display_name"]), stringValue(typed["displayName"]), stringValue(typed["name"])),
-						IsReasoning:    boolValue(typed["is_reasoning"]),
-						MaxInputTokens: intValue(typed["max_input_tokens"]),
-						PriceFactor:    floatValue(typed["price_factor"]),
-						IsFree:         boolValue(typed["is_free"]),
-						PromotionBadge: promotionBadge(typed["promotion"]),
-					})
-				}
-			}
+			appendModel(typed)
 			for _, child := range typed {
-				visit(child)
+				collectGroup(child)
 			}
 		}
 	}
-	visit(value)
+	var collectNamedGroup func(any, string) bool
+	collectNamedGroup = func(node any, name string) bool {
+		found := false
+		switch typed := node.(type) {
+		case []any:
+			for _, item := range typed {
+				found = collectNamedGroup(item, name) || found
+			}
+		case map[string]any:
+			if group, ok := typed[name]; ok {
+				found = true
+				collectGroup(group)
+			}
+			for key, child := range typed {
+				if key != name {
+					found = collectNamedGroup(child, name) || found
+				}
+			}
+		}
+		return found
+	}
+	hasChat := collectNamedGroup(value, "chat")
+	hasApp := collectNamedGroup(value, "app")
+	if !hasChat && !hasApp {
+		collectGroup(value)
+	}
 	return models
 }
 
