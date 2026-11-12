@@ -119,7 +119,7 @@ func TestManagementAccountsIncludesQuotaSnapshot(t *testing.T) {
 			}
 		},
 		fetchQuota: func(context.Context, qoderauth.Credential) (*qodercontrol.Quota, error) {
-			return &qodercontrol.Quota{PlanTier: "Pro", Remaining: 12, Limit: 100, Used: 88, Unit: "credits", ResetAt: resetAt, SyncedAt: syncedAt}, nil
+			return &qodercontrol.Quota{PlanTier: "Pro", Remaining: 12, Limit: 100, Used: 88, Unit: "credits", Shared: &qodercontrol.SharedQuota{Limit: 6000, Used: 254, Remaining: 5746, Available: true}, ResetAt: resetAt, SyncedAt: syncedAt}, nil
 		},
 	}
 	response, err := (managementHandler{kind: "accounts"}).HandleManagement(context.Background(), pluginapi.ManagementRequest{})
@@ -132,6 +132,9 @@ func TestManagementAccountsIncludesQuotaSnapshot(t *testing.T) {
 	}
 	if len(body.Accounts) != 1 || body.Accounts[0].PlanTier != "Pro" || body.Accounts[0].Remaining != 12 || body.Accounts[0].ResetAt == nil {
 		t.Fatalf("accounts=%+v", body.Accounts)
+	}
+	if shared := body.Accounts[0].Shared; shared == nil || shared.Remaining != 5746 || shared.Limit != 6000 {
+		t.Fatalf("shared quota=%+v", shared)
 	}
 	if containsAny(string(response.Body), "access_token", "refresh_token", "runtime_key") {
 		t.Fatalf("secret leaked in response=%s", response.Body)
@@ -152,7 +155,7 @@ func TestManagementQuotaRefreshReturnsSnapshotAndErrorState(t *testing.T) {
 			if cred.AccessToken != "secret" {
 				t.Fatalf("credential=%+v", cred)
 			}
-			return &qodercontrol.Quota{PlanTier: "Free", Remaining: 0, Limit: 10, Exhausted: true, Error: "upstream HTTP 429", SyncedAt: time.Now().UTC()}, qodercontrol.ErrQuotaUnknown
+			return &qodercontrol.Quota{PlanTier: "Free", Remaining: 0, Limit: 10, Exhausted: true, Error: "upstream HTTP 429", Shared: &qodercontrol.SharedQuota{Limit: 6000, Used: 254, Remaining: 5746, Available: true}, SyncedAt: time.Now().UTC()}, qodercontrol.ErrQuotaUnknown
 		},
 	}
 	response, err := (managementHandler{kind: "quota-refresh"}).HandleManagement(context.Background(), pluginapi.ManagementRequest{Body: []byte(`{"auth_index":"qoder-1"}`)})
@@ -165,6 +168,9 @@ func TestManagementQuotaRefreshReturnsSnapshotAndErrorState(t *testing.T) {
 	}
 	if body.AuthIndex != "qoder-1" || !body.Exhausted || body.QuotaError != "upstream HTTP 429" {
 		t.Fatalf("quota response=%+v", body)
+	}
+	if shared := body.Shared; shared == nil || shared.Remaining != 5746 || shared.Limit != 6000 {
+		t.Fatalf("shared quota=%+v", shared)
 	}
 }
 

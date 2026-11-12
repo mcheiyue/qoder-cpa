@@ -75,6 +75,7 @@ type managementAccount struct {
 	Used           float64                       `json:"used,omitempty"`
 	AddOn          float64                       `json:"add_on,omitempty"`
 	AddOnRemaining float64                       `json:"add_on_remaining,omitempty"`
+	Shared         *qodercontrol.SharedQuota     `json:"shared,omitempty"`
 	Dedicated      []qodercontrol.DedicatedQuota `json:"dedicated,omitempty"`
 	AgentLimit     float64                       `json:"agent_limit,omitempty"`
 	Exhausted      bool                          `json:"exhausted,omitempty"`
@@ -112,6 +113,7 @@ type managementQuota struct {
 	Used           float64                       `json:"used,omitempty"`
 	AddOn          float64                       `json:"add_on,omitempty"`
 	AddOnRemaining float64                       `json:"add_on_remaining,omitempty"`
+	Shared         *qodercontrol.SharedQuota     `json:"shared,omitempty"`
 	Dedicated      []qodercontrol.DedicatedQuota `json:"dedicated,omitempty"`
 	AgentLimit     float64                       `json:"agent_limit,omitempty"`
 	Exhausted      bool                          `json:"exhausted,omitempty"`

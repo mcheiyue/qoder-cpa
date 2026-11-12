@@ -70,17 +70,40 @@ func handleQuotaFetch(raw []byte) ([]byte, error) {
 			}},
 		})
 	}
-	// Scheduler hook: per-AuthID quota snapshot for exhausted exclusion and weighting.
+	// Scheduler weighting intentionally remains based on personal and add-on pools.
 	if aid := strings.TrimSpace(req.AuthID); aid != "" {
 		noteQuotaSnapshot(aid, quota.Remaining+quota.AddOnRemaining, quota.Exhausted)
 	}
+	remaining := quota.Remaining + quota.AddOnRemaining
+	used := quota.Used + quota.AddOnUsed
+	limit := quota.Limit + quota.AddOn
+	if quota.Shared != nil && quota.Shared.Available && !quota.Shared.Unlimited {
+		remaining += quota.Shared.Remaining
+		used += quota.Shared.Used
+		limit += quota.Shared.Limit
+	}
 	summary := []pluginapi.QuotaMetric{
-		{Key: "remain", Label: "通用剩余额度", Value: quota.Remaining + quota.AddOnRemaining, Unit: quota.Unit},
-		{Key: "used", Label: "通用已用额度", Value: quota.Used + quota.AddOnUsed, Unit: quota.Unit},
-		{Key: "limit", Label: "通用额度上限", Value: quota.Limit + quota.AddOn, Unit: quota.Unit},
+		{Key: "remain", Label: "通用剩余额度", Value: remaining, Unit: quota.Unit},
+		{Key: "used", Label: "通用已用额度", Value: used, Unit: quota.Unit},
+		{Key: "limit", Label: "通用额度上限", Value: limit, Unit: quota.Unit},
 		{Key: "agentLimit", Label: "Agent额度", Value: quota.AgentLimit, Unit: quota.Unit},
 		{Key: "planRemain", Label: "主额度剩余", Value: quota.Remaining, Unit: quota.Unit},
 		{Key: "addOnRemain", Label: "资源包剩余", Value: quota.AddOnRemaining, Unit: quota.Unit},
+	}
+	if shared := quota.Shared; shared != nil {
+		if shared.Unlimited {
+			summary = append(summary, pluginapi.QuotaMetric{Key: "shared", Label: "组织共享额度（不限量）已用", Value: shared.Used, Unit: quota.Unit})
+		} else {
+			label := "组织共享"
+			if !shared.Available {
+				label += "（不可用）"
+			}
+			summary = append(summary,
+				pluginapi.QuotaMetric{Key: "sharedLimit", Label: label + "上限", Value: shared.Limit, Unit: quota.Unit},
+				pluginapi.QuotaMetric{Key: "sharedUsed", Label: label + "已用", Value: shared.Used, Unit: quota.Unit},
+				pluginapi.QuotaMetric{Key: "sharedRemain", Label: label + "剩余", Value: shared.Remaining, Unit: quota.Unit},
+			)
+		}
 	}
 	for i, pack := range quota.Dedicated {
 		label := pack.Name

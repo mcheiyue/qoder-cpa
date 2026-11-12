@@ -33,6 +33,7 @@ type Quota struct {
 	AddOnRemaining float64          `json:"add_on_remaining,omitempty"`
 	AddOnUsed      float64          `json:"add_on_used,omitempty"`
 	Dedicated      []DedicatedQuota `json:"dedicated,omitempty"`
+	Shared         *SharedQuota     `json:"shared,omitempty"`
 	Exhausted      bool             `json:"exhausted"`
 	Unit           string           `json:"unit,omitempty"`
 	ResetAt        time.Time        `json:"reset_at,omitempty"`
@@ -63,6 +64,7 @@ type quotaUsageResponse struct {
 		Unit      string  `json:"unit"`
 	} `json:"addOnQuota"`
 	Dedicated []dedicatedQuotaWire `json:"dedicatedResourcePackages"`
+	Shared    *sharedQuotaWire     `json:"orgResourcePackage"`
 }
 
 type quotaPlanResponse struct {
@@ -124,7 +126,19 @@ func (c *Client) FetchQuota(ctx context.Context, cred qoderauth.Credential) (*Qu
 			quota.AddOnRemaining = usage.AddOnQuota.Remaining
 			quota.AddOnUsed = usage.AddOnQuota.Used
 			quota.Dedicated = normalizeDedicatedQuota(usage.Dedicated, quota.SyncedAt)
-			quota.Exhausted = quotaExhausted(usage.IsQuotaExceeded, quota.Limit+quota.AddOn, quota.Used+quota.AddOnUsed, quota.Remaining+quota.AddOnRemaining)
+			quota.Shared = normalizeSharedQuota(usage.Shared)
+			limit := quota.Limit + quota.AddOn
+			used := quota.Used + quota.AddOnUsed
+			remaining := quota.Remaining + quota.AddOnRemaining
+			if quota.Shared != nil && quota.Shared.Available && !quota.Shared.Unlimited {
+				limit += quota.Shared.Limit
+				used += quota.Shared.Used
+				remaining += quota.Shared.Remaining
+			}
+			quota.Exhausted = quotaExhausted(usage.IsQuotaExceeded, limit, used, remaining)
+			if quota.Shared != nil && quota.Shared.Available && quota.Shared.Unlimited {
+				quota.Exhausted = false
+			}
 			for _, pack := range quota.Dedicated {
 				if pack.Available && pack.Remaining > 0 {
 					quota.Exhausted = false
@@ -197,7 +211,7 @@ func (c *Client) FetchQuota(ctx context.Context, cred qoderauth.Credential) (*Qu
 		firstErr = statusErr
 	}
 
-	if quota.Unit == "" && (quota.Limit != 0 || quota.Remaining != 0 || quota.AddOn != 0 || quota.AddOnRemaining != 0) {
+	if quota.Unit == "" && (quota.Limit != 0 || quota.Remaining != 0 || quota.AddOn != 0 || quota.AddOnRemaining != 0 || quota.Shared != nil) {
 		quota.Unit = "credits"
 	}
 	// 国内站（阿里云 SSO）账号的 email 恒为空，手机号是唯一可读身份。国际站账号已有

@@ -163,6 +163,7 @@ func TestQuotaFetchSuccessSnapshotsScheduler(t *testing.T) {
 		}
 		return &qodercontrol.Quota{Remaining: 42, Limit: 100, Used: 58, Unit: "credits", Exhausted: false,
 			AddOn: 200, AddOnRemaining: 180, AddOnUsed: 20,
+			Shared:    &qodercontrol.SharedQuota{Limit: 6000, Used: 254, Remaining: 5746, Available: true},
 			Dedicated: []qodercontrol.DedicatedQuota{{Name: "模型专属", Limit: 1000, Remaining: 900, Available: true}}}, nil
 	})
 	env := callQuota(t, "quota.fetch", map[string]any{
@@ -189,10 +190,10 @@ func TestQuotaFetchSuccessSnapshotsScheduler(t *testing.T) {
 			remain = m.Value
 		}
 	}
-	if remain != 222 {
-		t.Fatalf("remain metric=%v, want 222 excluding dedicated (summary=%+v)", remain, result.Summary)
+	if remain != 5968 {
+		t.Fatalf("remain metric=%v, want 5968 including shared and excluding dedicated (summary=%+v)", remain, result.Summary)
 	}
-	wantMetrics := map[string]float64{"used": 78, "limit": 300, "planRemain": 42, "addOnRemain": 180, "dedicated0": 900}
+	wantMetrics := map[string]float64{"used": 332, "limit": 6300, "planRemain": 42, "addOnRemain": 180, "sharedLimit": 6000, "sharedUsed": 254, "sharedRemain": 5746, "dedicated0": 900}
 	for _, m := range result.Summary {
 		if want, ok := wantMetrics[m.Key]; ok {
 			if m.Value != want {

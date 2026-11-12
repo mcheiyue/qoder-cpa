@@ -56,3 +56,46 @@ func TestFetchQuotaAccountsForResourcePools(t *testing.T) {
 		})
 	}
 }
+
+func TestFetchQuotaAccountsForSharedResourcePackage(t *testing.T) {
+	for _, tc := range []struct {
+		name, usage       string
+		limit, used, left float64
+		available         bool
+		unlimited         bool
+		exhausted         bool
+	}{
+		{"shared only", `{"orgResourcePackage":{"cap":6000,"total":8000,"used":254,"remaining":5746,"available":true}}`, 6000, 254, 5746, true, false, false},
+		{"shared rescues exhausted personal quota", `{"isQuotaExceeded":true,"userQuota":{"total":300,"used":300,"remaining":0},"orgResourcePackage":{"cap":6000,"used":254,"remaining":5746,"available":true}}`, 6000, 254, 5746, true, false, false},
+		{"unavailable shared does not rescue account", `{"isQuotaExceeded":true,"userQuota":{"total":300,"used":300,"remaining":0},"orgResourcePackage":{"cap":6000,"used":254,"remaining":5746,"available":false}}`, 6000, 254, 5746, false, false, true},
+		{"unlimited ignores placeholder remaining", `{"orgResourcePackage":{"cap":-1,"used":254,"remaining":1000000,"available":true}}`, -1, 254, 0, true, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == quotaUsagePath {
+					if _, err := io.WriteString(w, tc.usage); err != nil {
+						t.Error(err)
+					}
+					return
+				}
+				if _, err := io.WriteString(w, `{}`); err != nil {
+					t.Error(err)
+				}
+			}))
+			defer srv.Close()
+
+			client, _ := newTestClient(t, srv)
+			quota, err := client.FetchQuota(context.Background(), qoderauth.Credential{AccessToken: "test"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			shared := quota.Shared
+			if shared == nil || shared.Limit != tc.limit || shared.Used != tc.used || shared.Remaining != tc.left || shared.Available != tc.available || shared.Unlimited != tc.unlimited {
+				t.Fatalf("shared=%+v, want limit=%v used=%v remaining=%v available=%v unlimited=%v", shared, tc.limit, tc.used, tc.left, tc.available, tc.unlimited)
+			}
+			if quota.Exhausted != tc.exhausted {
+				t.Fatalf("exhausted=%v, want %v; quota=%+v", quota.Exhausted, tc.exhausted, quota)
+			}
+		})
+	}
+}
