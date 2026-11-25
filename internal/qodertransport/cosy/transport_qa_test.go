@@ -120,18 +120,33 @@ func TestTransport_TamperedSignature(t *testing.T) {
 }
 
 func TestTransport_TamperedBody(t *testing.T) {
+	const requestBody = `not json`
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		encodedBody, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read request body: %v", err)
+		}
+		if decodedBody := DecodeBody(encodedBody); string(decodedBody) != requestBody {
+			t.Errorf("decoded request body: got %q, want %q", decodedBody, requestBody)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer ts.Close()
+
 	fields := deriveTestFields(t)
-	tr, err := NewTransport(Config{Endpoint: EndpointAPI2})
+	tr, err := NewTransport(Config{HTTPClient: ts.Client(), Endpoint: EndpointAPI2, BaseURL: ts.URL, AllowTestEndpoint: true})
 	if err != nil {
 		t.Fatalf("NewTransport: %v", err)
 	}
-	_, err = tr.Stream(context.Background(), StreamRequest{
-		RuntimeFields: fields, RequestBody: []byte(`not json`),
+	resp, err := tr.Stream(context.Background(), StreamRequest{
+		RuntimeFields: fields, RequestBody: []byte(requestBody),
 		RequestID: "r", CosyVersion: "1.1.34",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	defer resp.Cancel()
 }
 
 func TestTransport_429Error(t *testing.T) {
