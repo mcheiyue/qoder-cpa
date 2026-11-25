@@ -36,6 +36,7 @@ credentials/
 *.pcap
 evidence/
 tools/evidence/
+.playwright-cli/
 
 # Release artifacts
 dist/

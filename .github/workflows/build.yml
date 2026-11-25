@@ -27,18 +27,34 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             arch: amd64
+            cflags: -O2 -march=x86-64 -mtune=generic
           - os: ubuntu-24.04-arm
             arch: arm64
+            cflags: -O2
     runs-on: ${{ matrix.os }}
+    env:
+      # 美西 Ivy Bridge 无 BMI2；固定 amd64 基线，避免 c-shared 产物触发非法指令。
+      # 固定 LTS 镜像和通用 CFLAGS，避免构建环境改变产物要求。
+      CGO_CFLAGS: ${{ matrix.cflags }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - run: gcc -dumpmachine; gcc -dumpversion; go env GOAMD64
       - run: mkdir -p dist/linux/${{ matrix.arch }}
       - run: CGO_ENABLED=1 go build -buildmode=c-shared -trimpath -ldflags='-s -w' -o dist/linux/${{ matrix.arch }}/qoder.so .
+      - name: verify no BMI2 in cgo objects
+        if: matrix.arch == 'amd64'
+        run: |
+          so=dist/linux/${{ matrix.arch }}/qoder.so
+          objdump -d --no-show-raw-insn "$so" > "$RUNNER_TEMP/qoder-disassembly.txt"
+          if grep -qwE 'shlx|shrx|sarx' "$RUNNER_TEMP/qoder-disassembly.txt"; then
+            echo "FATAL: baseline violation (BMI2 shlx/shrx/sarx present)"; exit 1
+          fi
+          echo "baseline OK"
       - uses: actions/upload-artifact@v4
         with:
           name: qoder-linux-${{ matrix.arch }}
@@ -56,6 +72,9 @@ jobs:
           pattern: qoder-linux-*
           merge-multiple: false
       - run: tar -czf qoder-${GITHUB_REF_NAME}.tar.gz -C dist .
+      - run: sha256sum qoder-${GITHUB_REF_NAME}.tar.gz > qoder-${GITHUB_REF_NAME}.tar.gz.sha256
       - uses: softprops/action-gh-release@v2
         with:
-          files: qoder-${{ github.ref_name }}.tar.gz
+          files: |
+            qoder-${{ github.ref_name }}.tar.gz
+            qoder-${{ github.ref_name }}.tar.gz.sha256

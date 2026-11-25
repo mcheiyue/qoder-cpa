@@ -44,7 +44,7 @@ func TestEmbeddedWebUISendsManagementKey(t *testing.T) {
 func TestEmbeddedWebUIModelsRateColumn(t *testing.T) {
 	html := string(qoderWebUI)
 	for _, required := range []string{
-		"<th>调用 ID</th><th>展示名</th><th>全球</th><th>国内</th>",
+		"<th scope=\"col\">调用 ID</th><th scope=\"col\">展示名</th><th scope=\"col\">全球</th><th scope=\"col\">国内</th>",
 		"function rateCell",
 		"function mergeModels",
 		"row.profile === 'cosy-cn'",
