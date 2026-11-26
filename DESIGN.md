@@ -1,90 +1,81 @@
-# Qoder CPA WebUI Design System
+# Qoder CPA WebUI 设计说明（当前实际实现）
 
-## 0. Research Log
+本文件描述仓库中已落地的实现，不是规划稿。数值均取自 `web/style.css`、`web/*.js` 与本地浏览器实测。
 
-- Internal management surface: operational account management, not a marketing page.
-- CPA management API contract: authenticated management routes and an unauthenticated resource route for the embedded page.
-- Browser QA: local Playwright fixture coverage is available; production account flows remain outside this design-only check.
+## 1. 交付形态与资源路由
 
-## 1. Direction
+- 页面由 5 个嵌入资源组成：`web/index.html`、`style.css`、`api.js`、`views.js`、`app.js`，由 `web.go` 的 `//go:embed` 打进插件。
+- `management.go` 的 `qoderWebResourceRegistration()` 为每个资源注册 `/文件名`，仅 `index.html` 带菜单名 `Qoder`；`HandleManagement` 以 `web:<文件名>` 分发，未知路径返回 404。
+- 所有资源响应带 `Cache-Control: no-store`；`web_test.go` 校验资源清单、Content-Type、禁止外部引用、非 GET 与越权路径。
+- 无构建工具、无框架、无新依赖；三个脚本按 `api.js → views.js → app.js` 顺序加载。
 
-The page is a compact operational panel for scanning account state and changing one
-transport setting. On desktop the first viewport includes the title, login action,
-status feedback and account table. On mobile these follow one document scroll,
-without a hero or nested cards.
+## 2. 视图结构与启动状态
 
-## 2. Tokens
+- 顶部 `topbar`（品牌 + 最近刷新时间 + 主题选择），其下是横向 `task-nav`：账号 / 模型 / 活动 / 连接与诊断，`aria-current` 标记当前视图。
+- `boot()` 读取 `location.hash` 决定首个视图；无管理密钥时强制进入“连接与诊断”，并把 hash 改写为 `#connection`，避免地址栏与画面不一致。
+- `hashchange` 监听器在浏览器后退/前进或手改 hash 时同步视图；`setView()` 负责写 hash、重绘、按需首次加载模型目录。
+- 管理凭据只走 `localStorage`（`qoder-cpa-mgmt-key`，兼容借用 CPA 面板键），不写入 URL 或日志；切换密钥后丢弃旧账号、模型与在途响应。
+- 账号 / 分配置 / 优先级 / 配额 / 删除 / OAuth / 活动 / 领取的管理接口路径与请求体保持不变。
 
-- Background: `#f5f7fb`; dark background `#101318`.
-- Surface: `#ffffff`; dark surface `#191e27`.
-- Text: `#182230`; dark text `#f2f4f7`.
-- Muted text: `#5b6474`; dark muted text `#c0c8d4`.
-- Border: `#858e9e`; dark border `#626f84`. Control edges against the panel measure 3.30:1 in light and 3.28:1 in dark.
-- Primary action: `#2563eb` with white text.
-- Danger action: `#b42318` with white text; dark danger action `#ff6b61` with dark text `#1b1010`.
-- Free label: `#1a7f37`; dark free label `#5ee38a`.
-- Promotion label: `#b45309`; dark promotion label `#f2c14e`.
-- Warning states use the promotion token; normal quota states use the free token.
-- Radius: 6px for controls, 8px for the single table region.
-- Spacing: 8px control rhythm, 16px section rhythm, 24px page inset.
+## 3. 视觉令牌（与 style.css 一致）
 
-## 3. Layout
+- 浅色：底 `#f5f6f8`、面 `#ffffff`、正文 `#17191d`、次要 `#5f656d`、边框 `#dfe2e6`、主色 `#1764c0`。
+- 深色：底 `#15171a`、面 `#1d2024`、正文 `#f1f2f4`、次要 `#aab0ba`、边框 `#343940`、主色 `#79b5ff`。
+- 主色体系为蓝色（非紫色）；语义色：正常 `#117a57`、警示 `#a45d05`、危险 `#ba3d45`。
+- 圆角 6 / 10 / 16px；间距 4 / 8 / 12 / 16 / 20 / 24 / 32px；控件最小高度 `--control: 44px`。
+- 主题由 `localStorage` 记忆并可跟随系统；`color-scheme` 与 `data-theme` 同步，避免首帧闪烁。
 
-- A centered content column is capped at 1440px and uses `96vw` before the cap.
-- The header contains the page title/context and the primary login action.
-- Section titles keep their explanations close while model/activity controls and account load time stay on the right at wide widths; section heads become left-aligned below the 680px breakpoint.
-- Account, model, and campaign tables use keyboard-focusable horizontal scroll regions below 680px, with a subtle inset edge cue and a restrained `左右滑动查看` cue below the scroller.
-- No fixed or sticky panel may cover the table or status message.
+## 4. 布局与响应式
 
-Layout: The document owns vertical scrolling; `main` is a normal content container. The account, model, and campaign tables each scroll horizontally in their own `.table-wrap`. Below 680px, section heads become left-aligned and the tables retain readable column widths through local scrolling rather than clipping. Each `.table-wrap` is keyboard-focusable with `tabindex="0"` and an accurate `aria-label`. Summary groups use spacing and neutral dividers, without inner card frames.
+- `main` 最大宽 1320px、左右内边距 24px；`task-nav` 吸附顶部、横向排列且可横向滚动。
+- 账号列表为五列网格（身份 / 套餐 / 额度 / 状态 / 操作）；≤900px 时操作按钮占满整行；≤760px 改为单列，字段用 `data-label` 行内标注。
+- 表格在 ≤760px 变为逐行卡片式（表头隐藏、单元格带标签），避免裁切；账号编辑面板在 ≤760px 转为全屏 sheet。
+- 手机端令牌采用已批准的 15–16 CSS px 正文基线：桌面 15px、≤760px 为 16px，控件 44px，导航 48px；不使用旧的 23px / 20px 基线。
 
-Spacing: 在 390px、DPR 3 的触控 fixture 中，页面宽度为 390px，`main` 内边距 16px；三个表格容器各宽 308px，内容宽度为 1504px、980px、980px。1440px 和 1920px 桌面页面均无页面级横向溢出，`main` 内边距 24px。分区外距和内边距各 16px，控件间距 8px。手机控件高 44–49px，次要文字 20px。这些数据对应 Alice/Bob 两账号的测试数据，表格内容宽度随实际数据变化。
+## 5. 状态真值表
 
-## 4. Components
+| 状态 | 用户看到 | 请求与护栏 |
+|---|---|---|
+| 启动 / 重载 | 与地址栏 hash 相同的视图；无密钥时是连接页 | hash 决定视图；无密钥改写为 `#connection`；`hashchange` 同步 |
+| 账号读取中 | 概览为 `-`，文案“正在读取账号” | 不显示 0；只发一次账号读取 |
+| 账号读取失败 | 概览“读取失败”+ 错误原因 | 不伪装成空列表；重试成功后恢复 |
+| 模型读取中 | 状态“正在读取模型目录”，计数“正在读取” | 计数区不出现 0 |
+| 模型读取失败 | 状态“刷新失败”，计数“未读取”，表体“模型目录读取失败” | 失败不清空成“暂无模型目录”；重试成功后恢复 |
+| 模型成功但为空 | 计数 0，表体“暂无模型目录” | 仅在成功空响应后出现 |
+| 账号配额未读取 | 额度列“未读取” | 缺失或失败不按 0 计算 |
+| 编辑面板刷新配额 | 草稿（传输方式、优先级）保留 | 刷新后重绘详情但不动输入值 |
+| 列表刷新后账号已消失 | 编辑器关闭，状态提示“编辑器已关闭” | 关闭时丢弃该账号草稿，旧详情不再渲染 |
+| 保存成功 | 账号列表立即显示新传输方式，关闭编辑器后仍保持 | 写回按保存时的账号与列表代际，与编辑器是否仍在无关 |
+| 保存完成前关闭并重开同一账号 | 列表显示保存值，新编辑器保留自己的草稿 | 编辑器提示与输入框只属于当前编辑器，旧完成不写入新编辑器 |
+| 保存期间列表被刷新 | 列表显示服务器最新值 | 旧保存完成时若列表代际已变，不再覆盖列表值 |
+| 保存期间继续输入 | 输入框保留用户新输入 | 只有输入仍等于刚保存值时才回写草稿 |
+| 保存失败 | 显示失败原因并保留草稿 | 待处理时重复点击不发送第二次 |
+| 活动切换账号 | 活动/查询/领取结果重置为“尚未查询” | 代际令牌丢弃旧账号响应 |
+| 账号被删除 | 选择回落到现存首个账号并清空旧结果 | 在途活动响应失效 |
+| OAuth 等待 | 等待状态 + “停止等待” | 5 分钟上限；只接受 http/https，且拒绝 `javascript:` 等协议 |
+| 升级链接 | 仅 http/https 渲染为链接，其余显示“未提供” | 新窗口带 `noopener noreferrer` |
 
-- Primary button: opens CPA's native Qoder OAuth URL in a new tab.
-- Status region: a live region for login, save, and error feedback.
-- Account table: label, email, status, profile selector, and save action.
-- Empty state: one concise sentence with the login action remaining visible.
+## 6. 移动端实测（390×844，DPR 3，触控）
 
-Screen brief:
+| 指标 | 实测值 |
+|---|---|
+| 正文 `font-size` | 16px（桌面 15px） |
+| 主按钮高度 | 44px |
+| 导航项高度 | 48px |
+| `main` 左右内边距 | 16px |
+| 页面级横向溢出 | 0 |
+| 次要文字 | 13px |
 
-- Primary action: `添加/切换 Qoder 账号`.
-- Information priorities: account state and quota, merged model catalog, then campaign/activity status.
-- Left out on purpose: decorative badges, marketing copy, duplicate summary prose, and a separate dashboard shell.
-- Required content: Management Key, account refresh/login controls, account status/quota/profile/priority/delete controls, merged model rates, campaign refresh/claim, activity query, and diagnostic status.
+## 7. 行为回归
 
-## 5. Interaction And Accessibility
+- `scripts/qoder-state-regression.js` 通过 Playwright 路由拦截构造网络边界，全部使用真实点击与键盘操作，`finally` 关闭上下文。
+- 覆盖 29 个用例：既有 19 项（概览加载、草稿保留、取消丢弃、活动选择、焦点恢复、三类迟到响应、账号删除失效、重复保存、失败重试、危险 OAuth、删除对话框取消/ESC、概览失败恢复、模型加载/空/失败、无账号、未知额度、切换密钥），新增 8 项（`#models` 与 `#activity` 启动、无密钥启动改写 hash、模型计数真值、升级链接协议、迟到优先级保存不覆盖新草稿、账号消失关闭编辑器、旧保存不覆盖刷新后列表），本轮再补 2 项（保存后可见列表即时重绘并取消保留持久值、关闭重开账号后迟到保存只更新账号不动新编辑器）。
+- 结果：`29 browser cases passed`；Go 侧 `go test ./... -shuffle=on -count=1` 与 `go vet ./...` 通过。
+- 本机 Playwright 默认 headless shell 缺失时需显式指定 `chromium.executablePath()` 对应的 `chrome.exe`；不得为此下载浏览器。
 
-- Native buttons and selects are keyboard reachable.
-- Each horizontal table region is keyboard reachable with `tabindex="0"` and an accurate `aria-label`.
-- Status feedback uses `role="status"`.
-- Account values are HTML-escaped before insertion; delete confirmation is an in-page dialog with cancel as the default focus and a theme-aware danger action, OAuth waiting is cancelable and bounded, and account editors retain unsaved drafts and focus across refresh.
-- Profile saves lock the matching row button for the request lifetime, and OAuth links accept only `http:` or `https:` URLs after parsing.
-- Button press feedback uses a short filter/transform transition; `prefers-reduced-motion: reduce` removes that transition.
+## 8. 已知边界
 
-State table:
-
-| State | User sees | Next action | Requests and guard |
-|---|---|---|---|
-| Account/model loading | `未知` summary plus a specific loading message | wait or refresh | the matching read only; no zero or empty result |
-| Account/model error | `读取失败` beside the affected region | refresh | the failed region keeps its error until a new read succeeds |
-| Empty model catalog | `0` and `暂无模型目录` | refresh | only after a successful zero-result response |
-| Activity selection change | campaign/activity results reset to `尚未查询` | choose an account and query again | increments the G1 generation; late campaign, activity, or claim responses are dropped |
-| 账号列表刷新 | 保留未保存的传输方式、优先级和活动账号选择 | 继续编辑或保存 | 重绘前记录正在编辑的字段；用户已移开的焦点不会被抢回 |
-| 活动账号已删除 | 选择仍存在的首个账号，并清空旧账号结果 | 重新查询 | 原账号的活动、查询和领取响应失效 |
-| 保存中或保存失败 | 保存中锁定该行按钮；失败显示原因并允许重试 | 等待或重试 | 待处理时重复点击不发送第二次保存 |
-| OAuth waiting | waiting status plus `停止等待` | cancel or finish authorization | polling is bounded by five minutes and a generation token |
-
-## 6. Responsive Behavior
-
-- The page inset remains 24px on wide screens and becomes 16px at the 680px breakpoint.
-- The table retains readable column widths through horizontal scrolling instead of clipping or overlaying content.
-- Color scheme follows the operating system through `prefers-color-scheme`; dark free and promotion labels use their brighter tokens for readable contrast.
-- At 680px and below, the page uses a 23px body baseline, 20px secondary roles, and 44px controls to preserve the mobile readability and touch-target floor; tables remain local horizontal scrollers.
-
-## 7. Accepted Debt
-
-- 本轮截图矩阵覆盖 390px 触控、1440px 和 1920px 桌面的浅深主题，包含页尾与删除对话框；额外检查 320px 长文本重排。
-- 浏览器行为回归使用本地网络 fixture，不证明真实 OAuth、删除账号或权益领取成功。生产发布验收只读取管理目录和页面资源。
-- The page is intentionally a single embedded HTML resource; no frontend build tool or dependency is introduced.
+- 浏览器回归使用本地 fixture，不证明真实 OAuth、删除、领取或配额刷新在上游成功；不涉及真实凭据与生产环境。
+- 发布版本为 `v0.1.54`；CI、生产验收与回滚记录由 VPS 运维手册维护，不以本地截图代替生产验收。
+- 本轮重设计页面与编辑流程，并修复相关状态隔离；上游会话与推理协议实现不在本次范围。
+- 宿主菜单入口仍为 `/v0/resource/plugins/qoder/index.html`；旧的非注册管理路径别名不再作为页面入口。

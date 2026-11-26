@@ -137,8 +137,21 @@ func managementRegister() map[string]any {
 			{"method": http.MethodPost, "path": "/qoder/accounts/campaigns/claim"},
 			{"method": http.MethodPost, "path": "/qoder/accounts/activity/fetch"},
 		},
-		"resources": []map[string]string{{"path": "/index.html", "menu": "Qoder"}},
+		"resources": qoderWebResourceRegistration(),
 	}
+}
+
+func qoderWebResourceRegistration() []map[string]string {
+	names := []string{"index.html", "style.css", "api.js", "views.js", "app.js"}
+	resources := make([]map[string]string, 0, len(names))
+	for _, name := range names {
+		resource := map[string]string{"path": "/" + name, "menu": ""}
+		if name == "index.html" {
+			resource["menu"] = "Qoder"
+		}
+		resources = append(resources, resource)
+	}
+	return resources
 }
 
 func (h managementHandler) HandleManagement(ctx context.Context, request pluginapi.ManagementRequest) (pluginapi.ManagementResponse, error) {
@@ -157,11 +170,12 @@ func (h managementHandler) HandleManagement(ctx context.Context, request plugina
 		return defaultManagementService.claimCampaign(ctx, request.Body)
 	case "activity-fetch":
 		return defaultManagementService.fetchActivity(ctx, request.Body)
-	case "web":
-		return pluginapi.ManagementResponse{StatusCode: http.StatusOK, Headers: http.Header{
-			"Content-Type":  {"text/html; charset=utf-8"},
-			"Cache-Control": {"no-store"},
-		}, Body: qoderWebUI}, nil
+	case "web:index.html", "web:style.css", "web:api.js", "web:views.js", "web:app.js":
+		asset, ok := qoderWebAssets[strings.TrimPrefix(h.kind, "web:")]
+		if !ok {
+			return pluginapi.ManagementResponse{StatusCode: http.StatusNotFound}, nil
+		}
+		return qoderWebResponse(asset), nil
 	default:
 		return pluginapi.ManagementResponse{StatusCode: http.StatusNotFound}, nil
 	}

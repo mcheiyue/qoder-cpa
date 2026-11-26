@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"strings"
 
 	"github.com/mcheiyue/qoder-cpa/internal/qoderauth"
@@ -112,10 +113,14 @@ func managementHandle(raw []byte) ([]byte, error) {
 		kind = "activity-fetch"
 	case path == "/qoder/models":
 		kind = "models"
-	case path == "/index.html" || strings.HasSuffix(path, "/qoder/index.html"):
-		kind = "web"
 	default:
-		return errorEnvelopeStatus("not_found", "management route not found", 404), nil
+		if request.Method != http.MethodGet {
+			return errorEnvelopeStatus("not_found", "management route not found", 404), nil
+		}
+		if _, ok := qoderWebAssetFor(path); !ok {
+			return errorEnvelopeStatus("not_found", "management route not found", 404), nil
+		}
+		kind = "web:" + strings.TrimPrefix(path, "/")
 	}
 	response, err := (managementHandler{kind: kind}).HandleManagement(context.Background(), request)
 	if err != nil {
